@@ -142,5 +142,4 @@ Soporte para Redis y APCu como backends de Object Cache de WordPress. El plugin 
 5. Pull Request
 
 ## Licencia
-
-Propietario — Transparent Edge Services, S.L.
+Apache 2.0
