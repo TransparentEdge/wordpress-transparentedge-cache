@@ -5,8 +5,8 @@ Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
 Stable tag: 1.0.0
-License: Proprietary
-License URI: https://www.transparentedge.eu
+License: Apache-2.0
+License URI: https://www.apache.org/licenses/LICENSE-2.0
 
 Native caching and WPO plugin for Transparent Edge CDN. Leverages Varnish Enterprise features: Surrogate-Keys, Soft Purge, i3 image optimization, and intelligent cache warm-up.
 
