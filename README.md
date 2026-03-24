@@ -31,49 +31,6 @@ Si es la primera instalación, aparece un wizard que:
 - Aplica defaults óptimos para ese tipo de site
 - Conecta con la API en un click
 
-## Arquitectura
-
-```
-transparent-edge-cache/
-├── transparent-edge-cache.php     # Bootstrap, autoloader, activation
-├── includes/
-│   ├── TE_Settings.php            # Gestión de opciones, defaults por tipo de site
-│   ├── TE_Api.php                 # Cliente OAuth2, purge/tag/BAN/soft purge/refetch
-│   ├── TE_Core.php                # Singleton orquestador, admin bar
-│   ├── TE_Wizard.php              # Setup wizard, detección de site type
-│   ├── modules/
-│   │   ├── TE_Headers.php         # Cache-Control dual TTL, Surrogate-Keys, Vary
-│   │   ├── TE_Invalidation.php    # Purge por tags, warm-up, 12+ hooks WordPress
-│   │   ├── TE_BrowserCache.php    # Cache headers estáticos (Apache .htaccess + Nginx snippet)
-│   │   ├── TE_I3.php              # Panel i3, generador VCL
-│   │   ├── TE_Frontend.php        # Delay JS, Lazy Load, LCP Preload, HTML Minify, DNS Prefetch
-│   │   ├── TE_Minify.php          # CSS/JS minification + defer JS, caché en disco
-│   │   ├── TE_GoogleFonts.php     # Self-host Google Fonts
-│   │   ├── TE_Preload.php         # Sitemap crawl, cola background, rate-limited
-│   │   ├── TE_Heartbeat.php       # Control del WP Heartbeat API
-│   │   ├── TE_WooCommerce.php     # Integración completa WooCommerce
-│   │   ├── TE_Multisite.php       # Soporte multisite, credenciales de red
-│   │   ├── TE_ObjectCache.php     # Redis/APCu drop-in manager
-│   │   └── TE_Dashboard.php       # Dashboard de rendimiento, widget WP
-│   └── admin/
-│       ├── TE_Admin.php           # Panel admin, AJAX, VCL generators
-│       └── views/main-page.php    # Vista principal (8 pestañas)
-├── assets/
-│   ├── css/admin.css
-│   └── js/admin.js
-└── languages/                     # i18n (es_ES)
-```
-
-## API de Transparent Edge
-
-### Endpoints utilizados
-
-| Endpoint | Método | Uso |
-|---|---|---|
-| `/v1/oauth2/access_token/` | POST | Obtener token OAuth2 |
-| `/v1/companies/{id}/invalidate/` | POST | Purge/Soft Purge por URL, BAN |
-| `/v1/companies/{id}/tag_invalidate/` | POST | Purge por Surrogate-Keys |
-
 ### Autenticación
 
 OAuth2 client_credentials. Token cacheado en WP transient (1 hora). En multisite, credenciales heredables desde la configuración de red.
