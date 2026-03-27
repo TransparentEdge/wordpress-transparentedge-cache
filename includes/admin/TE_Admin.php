@@ -25,6 +25,7 @@ class TE_Admin {
 		add_action( 'wp_ajax_flavor_edge_preload_start', array( __CLASS__, 'ajax_preload_start' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_stop', array( __CLASS__, 'ajax_preload_stop' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_status', array( __CLASS__, 'ajax_preload_status' ) );
+		add_action( 'wp_ajax_flavor_edge_reset_circuit', array( __CLASS__, 'ajax_reset_circuit' ) );
 
 		// Settings link in plugin list.
 		add_filter( 'plugin_action_links_' . FLAVOR_EDGE_BASENAME, array( __CLASS__, 'plugin_action_links' ) );
@@ -131,16 +132,69 @@ class TE_Admin {
 			printf( '<div class="notice %s is-dismissible"><p>%s</p></div>', esc_attr( $class ), esc_html( $notice ) );
 		}
 
+		// Circuit breaker warning.
+		if ( TE_Settings::is_connected() ) {
+			$circuit = TE_Api::get_circuit_status();
+			if ( $circuit['open'] ) {
+				$reset_url = wp_nonce_url(
+					add_query_arg( 'flavor_edge_action', 'reset_circuit' ),
+					'flavor_edge_purge'
+				);
+				printf(
+					'<div class="notice notice-error"><p><strong>%s</strong> %s <a href="%s" class="button button-small" style="margin-left:8px;">%s</a></p></div>',
+					esc_html__( '⚠ Transparent Edge API no disponible.', 'flavor-edge-cache' ),
+					sprintf(
+						/* translators: %d: seconds remaining */
+						esc_html__( 'Las funciones de invalidación CDN están suspendidas temporalmente (reintento automático en %d seg). Las optimizaciones locales (minify, lazy load, etc.) siguen activas.', 'flavor-edge-cache' ),
+						$circuit['cooldown_remaining']
+					),
+					esc_url( $reset_url ),
+					esc_html__( 'Reintentar ahora', 'flavor-edge-cache' )
+				);
+			} elseif ( $circuit['failures'] > 0 ) {
+				printf(
+					'<div class="notice notice-warning is-dismissible"><p>%s</p></div>',
+					sprintf(
+						/* translators: %d: number of failures */
+						esc_html__( 'Transparent Edge API: %d fallo(s) recientes de conexión. El plugin sigue funcionando, pero revisa la configuración si el problema persiste.', 'flavor-edge-cache' ),
+						$circuit['failures']
+					)
+				);
+			}
+		}
+
 		// Show setup prompt if not connected.
 		if ( ! TE_Settings::is_connected() ) {
-			$screen = get_current_screen();
+			$screen  = get_current_screen();
+			$s       = TE_Settings::get_all();
+			$has_creds = ! empty( $s['client_id'] ) && ! empty( $s['client_secret'] );
+
 			if ( $screen && 'toplevel_page_flavor-edge-cache' !== $screen->id ) {
-				printf(
-					'<div class="notice notice-warning"><p>%s <a href="%s">%s</a></p></div>',
-					esc_html__( 'Transparent Edge Cache needs to be configured.', 'flavor-edge-cache' ),
-					esc_url( admin_url( 'admin.php?page=flavor-edge-cache' ) ),
-					esc_html__( 'Set it up now →', 'flavor-edge-cache' )
-				);
+				if ( $has_creds && ! $s['connected'] ) {
+					// Had credentials but health check marked as disconnected.
+					$health    = TE_Api::get_health_status();
+					$reset_url = wp_nonce_url(
+						add_query_arg( 'flavor_edge_action', 'reset_circuit' ),
+						'flavor_edge_purge'
+					);
+					printf(
+						'<div class="notice notice-error"><p><strong>%s</strong> %s <a href="%s" class="button button-small" style="margin-left:8px;">%s</a> <a href="%s" style="margin-left:8px;">%s</a></p></div>',
+						esc_html__( '⚠ Transparent Edge API desconectada.', 'flavor-edge-cache' ),
+						esc_html__( 'La API ha sido inalcanzable durante múltiples verificaciones. Las optimizaciones locales siguen activas. La conexión se restaurará automáticamente cuando la API vuelva a estar disponible.', 'flavor-edge-cache' ),
+						esc_url( $reset_url ),
+						esc_html__( 'Reintentar ahora', 'flavor-edge-cache' ),
+						esc_url( admin_url( 'admin.php?page=flavor-edge-cache' ) ),
+						esc_html__( 'Ver configuración', 'flavor-edge-cache' )
+					);
+				} else {
+					// Never configured.
+					printf(
+						'<div class="notice notice-warning"><p>%s <a href="%s">%s</a></p></div>',
+						esc_html__( 'Transparent Edge Cache needs to be configured.', 'flavor-edge-cache' ),
+						esc_url( admin_url( 'admin.php?page=flavor-edge-cache' ) ),
+						esc_html__( 'Set it up now →', 'flavor-edge-cache' )
+					);
+				}
 			}
 		}
 	}
@@ -371,6 +425,27 @@ class TE_Admin {
 
 		$status = TE_Preload::get_status();
 		wp_send_json_success( $status );
+	}
+
+	/**
+	 * AJAX handler: reset circuit breaker.
+	 */
+	public static function ajax_reset_circuit() {
+		check_ajax_referer( 'flavor_edge_admin', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
+
+		TE_Api::reset_circuit();
+
+		// Try to re-authenticate immediately.
+		$token = TE_Api::get_token( true );
+
+		wp_send_json_success( array(
+			'reconnected' => false !== $token,
+			'circuit'     => TE_Api::get_circuit_status(),
+		) );
 	}
 
 	/**

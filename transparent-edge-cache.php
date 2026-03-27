@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.0.0' );
+define( 'FLAVOR_EDGE_VERSION', '1.1.0' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -86,8 +86,29 @@ function flavor_edge_init() {
 
 	// Boot the core.
 	\flavor_edge\TE_Core::instance();
+
+	// Schedule periodic health check.
+	\flavor_edge\TE_Api::schedule_health_check();
 }
 add_action( 'plugins_loaded', 'flavor_edge_init' );
+
+/**
+ * Register custom cron schedule (30 minutes).
+ *
+ * @param array $schedules Existing schedules.
+ * @return array
+ */
+function flavor_edge_cron_schedules( $schedules ) {
+	$schedules['flavor_edge_30min'] = array(
+		'interval' => 1800,
+		'display'  => __( 'Every 30 minutes (Transparent Edge)', 'flavor-edge-cache' ),
+	);
+	return $schedules;
+}
+add_filter( 'cron_schedules', 'flavor_edge_cron_schedules' );
+
+// Register health check cron action.
+add_action( \flavor_edge\TE_Api::HEALTH_CRON_HOOK, array( 'flavor_edge\\TE_Api', 'run_health_check' ) );
 
 /**
  * Activation hook.
@@ -164,6 +185,7 @@ function flavor_edge_deactivate_single() {
 	wp_clear_scheduled_hook( 'flavor_edge_flush_queue' );
 	wp_clear_scheduled_hook( 'flavor_edge_preload_batch' );
 	wp_clear_scheduled_hook( 'flavor_edge_warmup_process' );
+	wp_clear_scheduled_hook( \flavor_edge\TE_Api::HEALTH_CRON_HOOK );
 
 	// Remove .htaccess rules.
 	if ( class_exists( 'flavor_edge\\TE_BrowserCache' ) ) {

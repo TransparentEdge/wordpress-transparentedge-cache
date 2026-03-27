@@ -57,7 +57,15 @@ class TE_Dashboard {
 			<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
 				<div>
 					<strong><?php esc_html_e( 'CDN Status', 'flavor-edge-cache' ); ?></strong><br>
-					<span style="font-size:24px;font-weight:700;color:#0073aa;">
+					<?php
+					$status_color = '#0073aa';
+					if ( ! $data['cdn']['connected'] ) {
+						$status_color = '#dc3232';
+					} elseif ( ! empty( $data['cdn']['circuit']['open'] ) ) {
+						$status_color = '#dba617';
+					}
+					?>
+					<span style="font-size:24px;font-weight:700;color:<?php echo esc_attr( $status_color ); ?>;">
 						<?php echo esc_html( $data['cdn']['status'] ); ?>
 					</span>
 				</div>
@@ -109,20 +117,31 @@ class TE_Dashboard {
 	 */
 	private static function get_cdn_metrics() {
 		$metrics = array(
-			'status'       => 'Unknown',
-			'connected'    => TE_Settings::is_connected(),
-			'method'       => TE_Settings::get( 'invalidation_method', 'soft' ),
-			'html_ttl'     => (int) TE_Settings::get( 'html_s_maxage', 172800 ),
-			'static_ttl'   => (int) TE_Settings::get( 'static_s_maxage', 2592000 ),
+			'status'        => 'Unknown',
+			'connected'     => TE_Settings::is_connected(),
+			'method'        => TE_Settings::get( 'invalidation_method', 'soft' ),
+			'html_ttl'      => (int) TE_Settings::get( 'html_s_maxage', 172800 ),
+			'static_ttl'    => (int) TE_Settings::get( 'static_s_maxage', 2592000 ),
 			'dashboard_url' => TE_Settings::is_connected()
 				? 'https://dashboard.transparentcdn.com/' . TE_Settings::get( 'company_id' ) . '/invalidation'
 				: '',
+			'circuit'       => TE_Api::get_circuit_status(),
+			'health'        => TE_Api::get_health_status(),
 		);
 
 		if ( $metrics['connected'] ) {
-			$metrics['status'] = __( 'Active', 'flavor-edge-cache' );
+			if ( $metrics['circuit']['open'] ) {
+				$metrics['status'] = __( 'Degraded (API temporarily unavailable)', 'flavor-edge-cache' );
+			} else {
+				$metrics['status'] = __( 'Active', 'flavor-edge-cache' );
+			}
 		} else {
-			$metrics['status'] = __( 'Not connected', 'flavor-edge-cache' );
+			$s = TE_Settings::get_all();
+			if ( ! empty( $s['client_id'] ) && ! empty( $s['client_secret'] ) ) {
+				$metrics['status'] = __( 'Disconnected (API unreachable)', 'flavor-edge-cache' );
+			} else {
+				$metrics['status'] = __( 'Not connected', 'flavor-edge-cache' );
+			}
 		}
 
 		return $metrics;

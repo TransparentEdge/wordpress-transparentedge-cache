@@ -475,9 +475,6 @@ class TE_Invalidation {
 		if ( ! wp_next_scheduled( 'flavor_edge_warmup_process' ) ) {
 			wp_schedule_single_event( time() + 1, 'flavor_edge_warmup_process' );
 		}
-
-		// Also try to process immediately if we can (best effort).
-		self::process_warmup_queue();
 	}
 
 	/**

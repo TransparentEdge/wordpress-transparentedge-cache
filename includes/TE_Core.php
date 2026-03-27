@@ -115,11 +115,20 @@ class TE_Core {
 			return;
 		}
 
+		// Check circuit breaker state for visual indicator.
+		$circuit = TE_Api::get_circuit_status();
+		$bar_title = '<span class="ab-icon dashicons dashicons-performance" style="margin-top:2px"></span>';
+
+		if ( $circuit['open'] ) {
+			$bar_title .= '<span style="color:#dc3232;">' . __( 'TE Cache ⚠', 'flavor-edge-cache' ) . '</span>';
+		} else {
+			$bar_title .= __( 'TE Cache', 'flavor-edge-cache' );
+		}
+
 		// Parent node.
 		$wp_admin_bar->add_node( array(
 			'id'    => 'flavor-edge',
-			'title' => '<span class="ab-icon dashicons dashicons-performance" style="margin-top:2px"></span>' .
-					   __( 'TE Cache', 'flavor-edge-cache' ),
+			'title' => $bar_title,
 			'href'  => admin_url( 'admin.php?page=flavor-edge-cache' ),
 		) );
 
@@ -200,6 +209,15 @@ class TE_Core {
 						: __( 'Purge failed: ', 'flavor-edge-cache' ) . $result['message'];
 					set_transient( 'flavor_edge_admin_notice', $msg, 30 );
 				}
+				break;
+
+			case 'reset_circuit':
+				TE_Api::reset_circuit();
+				$token = TE_Api::get_token( true );
+				$msg   = $token
+					? __( 'API connection restored successfully.', 'flavor-edge-cache' )
+					: __( 'API connection still failing. Check your credentials and network.', 'flavor-edge-cache' );
+				set_transient( 'flavor_edge_admin_notice', $msg, 30 );
 				break;
 		}
 
