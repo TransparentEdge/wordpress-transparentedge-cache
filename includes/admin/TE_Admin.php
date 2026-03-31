@@ -265,7 +265,7 @@ class TE_Admin {
 		$checkboxes = array(
 			'enabled', 'headers_enabled', 'surrogate_keys', 'vary_device', 'vary_language',
 			'invalidation_enabled', 'refetch_enabled',
-			'purge_on_post', 'purge_on_comment', 'purge_on_menu', 'purge_on_widget', 'purge_on_theme_switch',
+			'purge_on_post', 'purge_on_comment', 'purge_on_menu', 'purge_on_widget', 'purge_on_theme_switch', 'purge_on_plugin_change',
 			'i3_enabled', 'i3_auto_webp',
 			'minify_html', 'minify_css', 'minify_js', 'combine_css', 'combine_js', 'delay_js', 'defer_js',
 			'lazyload_images', 'lazyload_iframes', 'preload_lcp', 'selfhost_google_fonts',

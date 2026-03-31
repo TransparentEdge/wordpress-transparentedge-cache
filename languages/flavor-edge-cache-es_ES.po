@@ -3,8 +3,8 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.0.0\n"
-"PO-Revision-Date: 2026-03-20 10:16+0000\n"
+"Project-Id-Version: Transparent Edge Cache 1.1.0\n"
+"PO-Revision-Date: 2026-03-31 13:00+0000\n"
 "Language: es_ES\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -38,11 +38,11 @@ msgstr "Añadir cabeceras de depuración (X-Flavor-Edge-Keys, X-Flavor-Edge-TTL)
 msgid "Add defer attribute to JS files (load without blocking HTML parsing)"
 msgstr "Añadir atributo defer a archivos JS (carga sin bloquear el parseo HTML)"
 
-msgid "Add loading="lazy" to below-the-fold images"
-msgstr "Añadir loading="
+msgid "Add loading=\"lazy\" to below-the-fold images"
+msgstr "Añadir loading=\"lazy\" a imágenes fuera del viewport"
 
-msgid "Add loading="lazy" to iframes (YouTube, Google Maps, etc.)"
-msgstr "Añadir loading="
+msgid "Add loading=\"lazy\" to iframes (YouTube, Google Maps, etc.)"
+msgstr "Añadir loading=\"lazy\" a iframes (YouTube, Google Maps, etc.)"
 
 msgid "Additional DNS Prefetch"
 msgstr "DNS Prefetch Adicional"
@@ -206,7 +206,7 @@ msgstr "Conexión"
 msgid "Connection successful! Your credentials are valid."
 msgstr "¡Conexión exitosa! Tus credenciales son válidas."
 
-msgid "Control how Varnish and browsers cache your content. s-maxage is the CDN TTL (Varnish), max-age is for visitors\'"
+msgid "Control how Varnish and browsers cache your content. s-maxage is the CDN TTL (Varnish), max-age is for visitors'"
 msgstr "Controla cómo Varnish y los navegadores cachean tu contenido. s-maxage es el TTL del CDN (Varnish), max-age es para los navegadores de los visitantes"
 
 msgid "Copy this VCL snippet and deploy it from your Transparent Edge dashboard (Configuration → VCL). Save your i3 settings above first, then copy the generated snippet."
@@ -431,7 +431,7 @@ msgstr "Minificar JS"
 msgid "Minify JS files (removes comments, extra whitespace). Cached to disk."
 msgstr "Minificar archivos JS (elimina comentarios, espacios extra). Caché en disco."
 
-msgid "More aggressive than defer — scripts don\'t load at all until user interacts. Best for INP."
+msgid "More aggressive than defer — scripts don't load at all until user interacts. Best for INP."
 msgstr "Más agresivo que defer — los scripts no se cargan en absoluto hasta que el usuario interactúa. Ideal para INP."
 
 msgid "Multilingual"
@@ -485,7 +485,7 @@ msgstr "Un handle o patrón por línea. Los scripts que coincidan NO se combinar
 msgid "One handle or pattern per line. Scripts matching these will NOT get defer."
 msgstr "Un handle o patrón por línea. Los scripts que coincidan NO tendrán defer."
 
-msgid "One pattern per line. If a visitor has any of these cookies, the page won\'t be cached."
+msgid "One pattern per line. If a visitor has any of these cookies, the page won't be cached."
 msgstr "Un patrón por línea. Si un visitante tiene alguna de estas cookies, la página no se cacheará."
 
 msgid "One pattern per line. Regex supported. These URLs will never be cached."
@@ -767,7 +767,7 @@ msgstr "Precalentar caché inmediatamente tras invalidación (sin MISSes en frí
 msgid "We detected your site as:"
 msgstr "Hemos detectado tu site como:"
 
-msgid "We\'ll optimize cache settings based on your site type."
+msgid "We'll optimize cache settings based on your site type."
 msgstr "Optimizaremos la configuración de caché según el tipo de site."
 
 msgid "WebP Quality"
@@ -844,3 +844,50 @@ msgstr "🔄 Precalentar Caché vía Sitemap"
 
 msgid "🗑️ Purge All Cache"
 msgstr "🗑️ Purgar Toda la Caché"
+
+#: v1.1.0 — Circuit breaker, health check, plugin change purge
+
+msgid "API connection restored successfully."
+msgstr "Conexión con la API restaurada correctamente."
+
+msgid "API connection still failing. Check your credentials and network."
+msgstr "La conexión con la API sigue fallando. Revisa tus credenciales y la red."
+
+msgid "Degraded (API temporarily unavailable)"
+msgstr "Degradado (API temporalmente no disponible)"
+
+msgid "Disconnected (API unreachable)"
+msgstr "Desconectado (API inalcanzable)"
+
+msgid "Every 30 minutes (Transparent Edge)"
+msgstr "Cada 30 minutos (Transparent Edge)"
+
+msgid "Full purge when any plugin is activated or deactivated"
+msgstr "Purga completa cuando se activa o desactiva cualquier plugin"
+
+msgid "La API ha sido inalcanzable durante múltiples verificaciones. Las optimizaciones locales siguen activas. La conexión se restaurará automáticamente cuando la API vuelva a estar disponible."
+msgstr "La API ha sido inalcanzable durante múltiples verificaciones. Las optimizaciones locales siguen activas. La conexión se restaurará automáticamente cuando la API vuelva a estar disponible."
+
+msgid "Las funciones de invalidación CDN están suspendidas temporalmente (reintento automático en %d seg). Las optimizaciones locales (minify, lazy load, etc.) siguen activas."
+msgstr "Las funciones de invalidación CDN están suspendidas temporalmente (reintento automático en %d seg). Las optimizaciones locales (minify, lazy load, etc.) siguen activas."
+
+msgid "Plugin Changes"
+msgstr "Cambios de Plugins"
+
+msgid "Reintentar ahora"
+msgstr "Reintentar ahora"
+
+msgid "TE Cache ⚠"
+msgstr "TE Cache ⚠"
+
+msgid "Transparent Edge API: %d fallo(s) recientes de conexión. El plugin sigue funcionando, pero revisa la configuración si el problema persiste."
+msgstr "Transparent Edge API: %d fallo(s) recientes de conexión. El plugin sigue funcionando, pero revisa la configuración si el problema persiste."
+
+msgid "Ver configuración"
+msgstr "Ver configuración"
+
+msgid "⚠ Transparent Edge API desconectada."
+msgstr "⚠ Transparent Edge API desconectada."
+
+msgid "⚠ Transparent Edge API no disponible."
+msgstr "⚠ Transparent Edge API no disponible."

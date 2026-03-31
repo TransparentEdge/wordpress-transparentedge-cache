@@ -58,6 +58,7 @@ class TE_Settings {
 			'purge_on_menu'         => true,
 			'purge_on_widget'       => true,
 			'purge_on_theme_switch' => true,
+			'purge_on_plugin_change' => true,
 			'debounce_seconds'      => 2,
 
 			// i3 Image optimization.

@@ -421,6 +421,10 @@ defined( 'ABSPATH' ) || exit;
 					<td><label><input type="checkbox" name="purge_on_theme_switch" value="1" <?php checked( $settings['purge_on_theme_switch'] ); ?> /> <?php esc_html_e( 'Full purge when the active theme is changed', 'flavor-edge-cache' ); ?></label></td>
 				</tr>
 				<tr>
+					<th><?php esc_html_e( 'Plugin Changes', 'flavor-edge-cache' ); ?></th>
+					<td><label><input type="checkbox" name="purge_on_plugin_change" value="1" <?php checked( $settings['purge_on_plugin_change'] ); ?> /> <?php esc_html_e( 'Full purge when any plugin is activated or deactivated', 'flavor-edge-cache' ); ?></label></td>
+				</tr>
+				<tr>
 					<th colspan="2"><h3 style="margin:0"><?php esc_html_e( 'Cache warming', 'flavor-edge-cache' ); ?></h3></th>
 				</tr>
 				<tr>

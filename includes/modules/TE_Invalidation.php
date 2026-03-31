@@ -87,6 +87,12 @@ class TE_Invalidation {
 			add_action( 'switch_theme', array( __CLASS__, 'on_theme_switch' ) );
 		}
 
+		// Plugin activation / deactivation.
+		if ( $s['purge_on_plugin_change'] ) {
+			add_action( 'activated_plugin', array( __CLASS__, 'on_plugin_change' ), 10, 2 );
+			add_action( 'deactivated_plugin', array( __CLASS__, 'on_plugin_change' ), 10, 2 );
+		}
+
 		// Term changes.
 		add_action( 'edited_term', array( __CLASS__, 'on_term_edit' ), 10, 3 );
 		add_action( 'delete_term', array( __CLASS__, 'on_term_delete' ), 10, 4 );
@@ -245,6 +251,26 @@ class TE_Invalidation {
 	 * Handle theme switch — full purge.
 	 */
 	public static function on_theme_switch() {
+		self::$full_purge_pending = true;
+	}
+
+	/**
+	 * Handle plugin activation or deactivation — full purge.
+	 *
+	 * Plugins can affect any part of the frontend (shortcodes, widgets,
+	 * scripts, styles, REST endpoints), so a full purge is the safest
+	 * approach to ensure CDN content matches the origin.
+	 *
+	 * @param string $plugin Plugin basename (e.g., 'woocommerce/woocommerce.php').
+	 * @param bool   $network_wide Whether this is a network-wide action.
+	 */
+	public static function on_plugin_change( $plugin, $network_wide = false ) {
+		// Don't purge when our own plugin is being deactivated —
+		// at that point the API credentials may already be unavailable.
+		if ( FLAVOR_EDGE_BASENAME === $plugin ) {
+			return;
+		}
+
 		self::$full_purge_pending = true;
 	}
 
