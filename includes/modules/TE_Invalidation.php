@@ -431,17 +431,27 @@ class TE_Invalidation {
 			self::$full_purge_pending = false;
 			self::$pending_tags       = array();
 			self::$pending_urls       = array();
-			self::$warmup_urls        = array();
 
 			do_action( 'flavor_edge_after_purge_all', $result );
+
+			// Warm key pages after full soft purge.
+			if ( TE_Settings::get( 'refetch_enabled' ) ) {
+				self::$warmup_urls[] = home_url( '/' );
+				$blog_page_id = (int) get_option( 'page_for_posts' );
+				if ( $blog_page_id ) {
+					self::$warmup_urls[] = get_permalink( $blog_page_id );
+				}
+				self::do_warmup();
+			}
+
+			self::$warmup_urls = array();
 			return;
 		}
 
-		// Tag-based purge.
+		// Tag-based purge (always soft — prevents thundering herd on origin).
 		$tags = array_unique( array_filter( self::$pending_tags ) );
 		if ( ! empty( $tags ) ) {
-			$soft   = 'soft' === TE_Settings::get( 'invalidation_method' );
-			$result = TE_Api::purge_tags( $tags, $soft );
+			$result = TE_Api::purge_tags( $tags, true );
 
 			do_action( 'flavor_edge_after_tag_purge', $result, $tags );
 
@@ -451,12 +461,11 @@ class TE_Invalidation {
 			}
 		}
 
-		// URL-based purge (fallback or explicit).
+		// URL-based purge (always soft — fallback or explicit).
 		$urls = array_unique( array_filter( self::$pending_urls ) );
 		if ( ! empty( $urls ) ) {
-			$soft    = 'soft' === TE_Settings::get( 'invalidation_method' );
 			$refetch = TE_Settings::get( 'refetch_enabled' );
-			$result  = TE_Api::purge_urls( $urls, $soft, $refetch );
+			$result  = TE_Api::purge_urls( $urls, true, $refetch );
 
 			do_action( 'flavor_edge_after_url_purge', $result, $urls );
 		}
@@ -513,6 +522,17 @@ class TE_Invalidation {
 			return;
 		}
 
+		// SSRF protection: only warm URLs from our own host.
+		$own_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		$urls     = array_filter( $urls, function ( $url ) use ( $own_host ) {
+			return wp_parse_url( $url, PHP_URL_HOST ) === $own_host;
+		} );
+
+		if ( empty( $urls ) ) {
+			delete_option( 'flavor_edge_warmup_queue' );
+			return;
+		}
+
 		$batch_size = 5;
 		$batches    = array_chunk( $urls, $batch_size );
 
@@ -521,7 +541,7 @@ class TE_Invalidation {
 				wp_remote_get( $url, array(
 					'timeout'     => 3,
 					'blocking'    => true,
-					'user-agent'  => 'Flavor-Edge-Warmup/1.0',
+					'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 					'redirection' => 0,
 					'headers'     => array(
 						'Accept' => 'text/html,image/webp,*/*',

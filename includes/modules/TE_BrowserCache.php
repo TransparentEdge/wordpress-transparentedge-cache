@@ -285,10 +285,10 @@ class TE_BrowserCache {
 	 * @param array $options  Upgrade options.
 	 */
 	public static function on_asset_change( $upgrader = null, $options = array() ) {
-		// BAN all CSS/JS in Varnish.
+		// Soft purge static assets via site tag — avoids thundering herd.
 		if ( TE_Settings::is_connected() ) {
-			$domain = wp_parse_url( home_url(), PHP_URL_HOST );
-			TE_Api::ban( $domain . '/.*\.(css|js)(\?.*)?$' );
+			$site_tag = 'site-' . get_current_blog_id();
+			TE_Api::purge_tags( array( $site_tag ), true );
 		}
 
 		// Clear minify cache (regenerates with new content).

@@ -171,7 +171,7 @@ class TE_Preload {
 			$response = wp_remote_get( $url, array(
 				'timeout'     => 5,
 				'blocking'    => true,
-				'user-agent'  => 'Flavor-Edge-Preload/1.0',
+				'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 				'redirection' => 0,
 				'headers'     => array( 'Accept' => 'text/html,image/webp,*/*' ),
 			) );
@@ -222,7 +222,7 @@ class TE_Preload {
 		foreach ( $sitemap_urls as $candidate ) {
 			$response = wp_remote_get( $candidate, array(
 				'timeout'     => 10,
-				'user-agent'  => 'Flavor-Edge-Preload/1.0',
+				'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 				'redirection' => 3,
 			) );
 
@@ -249,7 +249,7 @@ class TE_Preload {
 			foreach ( self::extract_locs( $body ) as $sub_url ) {
 				$sub = wp_remote_get( $sub_url, array(
 					'timeout'    => 10,
-					'user-agent' => 'Flavor-Edge-Preload/1.0',
+					'user-agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 				) );
 				if ( ! is_wp_error( $sub ) ) {
 					$sub_body = wp_remote_retrieve_body( $sub );
@@ -267,20 +267,51 @@ class TE_Preload {
 
 	/**
 	 * Extract <loc> values from sitemap XML.
+	 * Only allows URLs from the same host as the site (SSRF protection).
 	 *
 	 * @param string $xml XML content.
 	 * @return array
 	 */
 	private static function extract_locs( $xml ) {
-		$urls = array();
+		$urls      = array();
+		$own_host  = wp_parse_url( home_url(), PHP_URL_HOST );
+
 		if ( preg_match_all( '/<loc>\s*(.*?)\s*<\/loc>/i', $xml, $matches ) ) {
 			foreach ( $matches[1] as $url ) {
 				$url = trim( html_entity_decode( $url ) );
-				if ( filter_var( $url, FILTER_VALIDATE_URL ) ) {
-					$urls[] = $url;
+				if ( ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+					continue;
 				}
+
+				// SSRF protection: only allow URLs from our own host.
+				$url_host = wp_parse_url( $url, PHP_URL_HOST );
+				if ( $url_host !== $own_host ) {
+					continue;
+				}
+
+				// Block internal/private IP ranges.
+				$ip = gethostbyname( $url_host );
+				if ( $ip !== $url_host && self::is_private_ip( $ip ) ) {
+					continue;
+				}
+
+				$urls[] = $url;
 			}
 		}
 		return $urls;
+	}
+
+	/**
+	 * Check if an IP address is in a private/reserved range.
+	 *
+	 * @param string $ip IP address.
+	 * @return bool
+	 */
+	private static function is_private_ip( $ip ) {
+		return ! filter_var(
+			$ip,
+			FILTER_VALIDATE_IP,
+			FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+		);
 	}
 }

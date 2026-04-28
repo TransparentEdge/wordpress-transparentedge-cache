@@ -186,6 +186,19 @@ class TE_Core {
 
 		$action = sanitize_text_field( $_GET['flavor_edge_action'] );
 
+		// Rate limit: max 1 purge action per 5 seconds per user.
+		$rate_key = 'flavor_edge_rate_' . get_current_user_id();
+		if ( in_array( $action, array( 'purge_all', 'purge_post' ), true ) ) {
+			if ( get_transient( $rate_key ) ) {
+				set_transient( 'flavor_edge_admin_notice',
+					__( 'Please wait a few seconds between purge actions.', 'flavor-edge-cache' ), 30 );
+				$redirect_url = remove_query_arg( array( 'flavor_edge_action', 'flavor_edge_post', '_wpnonce' ) );
+				wp_safe_redirect( $redirect_url );
+				exit;
+			}
+			set_transient( $rate_key, 1, 5 );
+		}
+
 		switch ( $action ) {
 			case 'purge_all':
 				$result = TE_Api::purge_all();

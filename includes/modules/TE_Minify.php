@@ -616,7 +616,13 @@ class TE_Minify {
 		}
 
 		if ( $path && file_exists( $path ) && is_readable( $path ) ) {
-			return $path;
+			// Path traversal protection: ensure resolved path is within WordPress.
+			$real = realpath( $path );
+			$abspath_real = realpath( ABSPATH );
+			if ( false === $real || false === $abspath_real || 0 !== strpos( $real, $abspath_real ) ) {
+				return false;
+			}
+			return $real;
 		}
 
 		return false;

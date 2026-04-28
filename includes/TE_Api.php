@@ -339,12 +339,23 @@ class TE_Api {
 	}
 
 	/**
-	 * Purge entire site (BAN on root).
+	 * Purge entire site using soft tag invalidation.
 	 *
+	 * Uses the site-wide Surrogate-Key tag instead of BAN to avoid
+	 * thundering herd on the origin. Varnish serves stale content
+	 * while revalidating in background.
+	 *
+	 * @param bool $force_ban Force a hard BAN (dangerous in high-traffic — use only in emergencies).
 	 * @return array
 	 */
-	public static function purge_all() {
-		return self::ban( home_url( '/' ) );
+	public static function purge_all( $force_ban = false ) {
+		if ( $force_ban ) {
+			return self::ban( home_url( '/' ) );
+		}
+
+		// Soft purge via site-wide tag — safe for high-traffic.
+		$site_tag = 'site-' . get_current_blog_id();
+		return self::purge_tags( array( $site_tag, 'front-page', 'feed' ), true );
 	}
 
 	// -------------------------------------------------------------------------
@@ -374,21 +385,6 @@ class TE_Api {
 			'body'    => wp_json_encode( $payload ),
 		) );
 	}
-
-	/**
-	 * Log a purge event to the database.
-	 *
-	 * @param string      $purge_type    Type (purge, soft_purge, ban, tag_purge).
-	 * @param string      $method        Method (url, tag, pattern).
-	 * @param string      $target        Target URLs or pattern.
-	 * @param string|null $tags          Tags (if tag-based).
-	 * @param string      $status        Status (success, error, pending).
-	 * @param int|null    $response_code HTTP response code.
-	 * @param string      $trigger       What triggered this (save_post, manual, etc.).
-	 */
-	// -------------------------------------------------------------------------
-	// Circuit breaker.
-	// -------------------------------------------------------------------------
 
 	/**
 	 * Check if the circuit breaker is open (API considered unavailable).

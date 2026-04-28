@@ -200,8 +200,8 @@ class TE_Headers {
 			header( 'Vary: ' . implode( ', ', $vary_parts ) );
 		}
 
-		// Debug header.
-		if ( $settings['debug_mode'] ) {
+		// Debug headers (admin only — never expose to public visitors).
+		if ( $settings['debug_mode'] && is_user_logged_in() && current_user_can( 'manage_options' ) ) {
 			header( 'X-Flavor-Edge-Keys: ' . implode( ' ', self::$surrogate_keys ) );
 			header( 'X-Flavor-Edge-TTL: max-age=' . $max_age . ', s-maxage=' . $s_maxage );
 		}
@@ -289,7 +289,7 @@ class TE_Headers {
 			foreach ( array_keys( $_COOKIE ) as $cookie_name ) {
 				foreach ( $excluded_cookies as $pattern ) {
 					$pattern = trim( $pattern );
-					if ( $pattern && preg_match( '#' . $pattern . '#', $cookie_name ) ) {
+					if ( $pattern && self::safe_pattern_match( $pattern, $cookie_name ) ) {
 						return true;
 					}
 				}
@@ -301,7 +301,7 @@ class TE_Headers {
 		$request_uri   = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
 		foreach ( $excluded_urls as $pattern ) {
 			$pattern = trim( $pattern );
-			if ( $pattern && preg_match( '#' . $pattern . '#', $request_uri ) ) {
+			if ( $pattern && self::safe_pattern_match( $pattern, $request_uri ) ) {
 				return true;
 			}
 		}
@@ -322,5 +322,29 @@ class TE_Headers {
 			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 			header( 'Pragma: no-cache' );
 		}
+	}
+
+	/**
+	 * Safely match a user-supplied pattern against a string.
+	 *
+	 * Tries the pattern as a regex first (with error suppression).
+	 * If the regex is invalid, falls back to substring match.
+	 * Prevents regex injection and ReDoS from malformed patterns.
+	 *
+	 * @param string $pattern User-supplied pattern.
+	 * @param string $subject String to match against.
+	 * @return bool
+	 */
+	private static function safe_pattern_match( $pattern, $subject ) {
+		// Try as regex first — suppress errors for invalid patterns.
+		$regex  = '#' . str_replace( '#', '\\#', $pattern ) . '#i';
+		$result = @preg_match( $regex, $subject );
+
+		if ( false === $result ) {
+			// Invalid regex — fall back to simple case-insensitive substring match.
+			return false !== stripos( $subject, $pattern );
+		}
+
+		return 1 === $result;
 	}
 }

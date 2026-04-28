@@ -340,14 +340,17 @@ else{window.addEventListener("load",function(){setTimeout(r,5000)})}
 			return $html;
 		}
 
+		// Generate a unique prefix per request to avoid any collision.
+		$uid = substr( md5( uniqid( '', true ) ), 0, 8 );
+
 		// Preserve content in <pre>, <script>, <style>, <textarea> tags.
 		$preserved = array();
 		$index     = 0;
 
 		$html = preg_replace_callback(
 			'/<(pre|script|style|textarea)\b[^>]*>.*?<\/\1>/is',
-			function ( $matches ) use ( &$preserved, &$index ) {
-				$key                = '<!--FLAVOR_PRESERVE_' . $index . '-->';
+			function ( $matches ) use ( &$preserved, &$index, $uid ) {
+				$key                = '___FEP_' . $uid . '_' . $index . '___';
 				$preserved[ $key ] = $matches[0];
 				$index++;
 				return $key;
@@ -355,8 +358,8 @@ else{window.addEventListener("load",function(){setTimeout(r,5000)})}
 			$html
 		);
 
-		// Remove HTML comments (except IE conditionals and preserved markers).
-		$html = preg_replace( '/<!--(?!FLAVOR_PRESERVE_|\[if).*?-->/s', '', $html );
+		// Remove HTML comments (except IE conditionals).
+		$html = preg_replace( '/<!--(?!\[if).*?-->/s', '', $html );
 
 		// Collapse whitespace between tags.
 		$html = preg_replace( '/>\s+</', '> <', $html );

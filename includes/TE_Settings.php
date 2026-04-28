@@ -111,6 +111,16 @@ class TE_Settings {
 	}
 
 	/**
+	 * Credential fields that should be encrypted at rest.
+	 */
+	const ENCRYPTED_FIELDS = array( 'client_id', 'client_secret' );
+
+	/**
+	 * Encryption prefix to identify encrypted values.
+	 */
+	const ENC_PREFIX = 'enc:';
+
+	/**
 	 * Get all settings.
 	 *
 	 * @param bool $force_refresh Force reload from database.
@@ -120,6 +130,25 @@ class TE_Settings {
 		if ( null === self::$settings || $force_refresh ) {
 			$saved          = get_option( self::OPTION_KEY, array() );
 			self::$settings = wp_parse_args( $saved, self::defaults() );
+
+			// Decrypt credentials in memory, auto-migrate unencrypted values.
+			$needs_save = false;
+			foreach ( self::ENCRYPTED_FIELDS as $field ) {
+				if ( ! empty( self::$settings[ $field ] ) ) {
+					if ( 0 === strpos( self::$settings[ $field ], self::ENC_PREFIX ) ) {
+						// Encrypted — decrypt for runtime use.
+						self::$settings[ $field ] = self::decrypt( self::$settings[ $field ] );
+					} else {
+						// Legacy plaintext — flag for migration.
+						$needs_save = true;
+					}
+				}
+			}
+
+			// Auto-encrypt legacy plaintext credentials.
+			if ( $needs_save ) {
+				self::save( self::$settings );
+			}
 		}
 		return self::$settings;
 	}
@@ -153,12 +182,23 @@ class TE_Settings {
 
 	/**
 	 * Save all settings.
+	 * Encrypts sensitive credentials before writing to the database.
 	 *
 	 * @param array $settings Full settings array.
 	 */
 	public static function save( $settings ) {
+		// Keep plaintext in memory cache.
 		self::$settings = $settings;
-		update_option( self::OPTION_KEY, $settings );
+
+		// Encrypt credentials before writing to DB.
+		$to_store = $settings;
+		foreach ( self::ENCRYPTED_FIELDS as $field ) {
+			if ( ! empty( $to_store[ $field ] ) && 0 !== strpos( $to_store[ $field ], self::ENC_PREFIX ) ) {
+				$to_store[ $field ] = self::encrypt( $to_store[ $field ] );
+			}
+		}
+
+		update_option( self::OPTION_KEY, $to_store );
 	}
 
 	/**
@@ -236,5 +276,71 @@ class TE_Settings {
 		}
 
 		self::save( $settings );
+	}
+
+	// -------------------------------------------------------------------------
+	// Credential encryption (AES-256-CBC).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Encrypt a value for storage.
+	 *
+	 * @param string $plaintext Value to encrypt.
+	 * @return string Encrypted value with prefix, or original if encryption unavailable.
+	 */
+	private static function encrypt( $plaintext ) {
+		if ( ! function_exists( 'openssl_encrypt' ) ) {
+			return $plaintext; // Graceful fallback — store plaintext.
+		}
+
+		$key = self::get_encryption_key();
+		$iv  = openssl_random_pseudo_bytes( 16 );
+
+		$encrypted = openssl_encrypt( $plaintext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+		if ( false === $encrypted ) {
+			return $plaintext;
+		}
+
+		// Format: enc:base64(iv + ciphertext)
+		return self::ENC_PREFIX . base64_encode( $iv . $encrypted );
+	}
+
+	/**
+	 * Decrypt a stored value.
+	 *
+	 * @param string $stored Encrypted value with prefix.
+	 * @return string Decrypted plaintext, or empty string on failure.
+	 */
+	private static function decrypt( $stored ) {
+		if ( ! function_exists( 'openssl_decrypt' ) ) {
+			// Can't decrypt — return without prefix as best effort.
+			return substr( $stored, strlen( self::ENC_PREFIX ) );
+		}
+
+		$key  = self::get_encryption_key();
+		$data = base64_decode( substr( $stored, strlen( self::ENC_PREFIX ) ) );
+
+		if ( false === $data || strlen( $data ) < 17 ) {
+			return ''; // Corrupted.
+		}
+
+		$iv         = substr( $data, 0, 16 );
+		$ciphertext = substr( $data, 16 );
+
+		$decrypted = openssl_decrypt( $ciphertext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+
+		return ( false !== $decrypted ) ? $decrypted : '';
+	}
+
+	/**
+	 * Derive the encryption key from WordPress salts.
+	 * Uses AUTH_KEY + SECURE_AUTH_SALT (unique per installation).
+	 *
+	 * @return string 32-byte key.
+	 */
+	private static function get_encryption_key() {
+		$material = ( defined( 'AUTH_KEY' ) ? AUTH_KEY : 'flavor-edge-default' )
+		          . ( defined( 'SECURE_AUTH_SALT' ) ? SECURE_AUTH_SALT : 'fallback-salt' );
+		return hash( 'sha256', $material, true ); // 32 bytes for AES-256.
 	}
 }

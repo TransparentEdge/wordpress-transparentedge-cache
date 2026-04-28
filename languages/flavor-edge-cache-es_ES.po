@@ -3,7 +3,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.1.0\n"
+"Project-Id-Version: Transparent Edge Cache 1.2.0\n"
 "PO-Revision-Date: 2026-03-31 13:00+0000\n"
 "Language: es_ES\n"
 "MIME-Version: 1.0\n"
@@ -891,3 +891,6 @@ msgstr "⚠ Transparent Edge API desconectada."
 
 msgid "⚠ Transparent Edge API no disponible."
 msgstr "⚠ Transparent Edge API no disponible."
+
+msgid "Please wait a few seconds between purge actions."
+msgstr "Por favor, espera unos segundos entre acciones de purga."
