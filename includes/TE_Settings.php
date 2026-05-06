@@ -107,6 +107,12 @@ class TE_Settings {
 			'heartbeat_disable_admin'  => true,        // Disable in admin (except editor).
 			'heartbeat_disable_editor' => false,       // Disable in post editor (risky).
 			'heartbeat_interval'       => 60,          // Seconds (15-120). Default WP is 15-60.
+
+			// Speculation Rules.
+			'speculation_enabled'    => false,           // Default off for upgrades; on for new installs via wizard.
+			'speculation_mode'       => 'balanced',      // 'conservative', 'balanced', 'aggressive'.
+			'speculation_post_types' => array( 'post', 'page' ),
+			'speculation_injection'  => 'php',           // 'php' (origin) or 'vcl' (edge).
 		);
 	}
 

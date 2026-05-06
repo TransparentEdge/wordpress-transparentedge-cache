@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.2.0' );
+define( 'FLAVOR_EDGE_VERSION', '1.3.0' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -48,6 +48,7 @@ spl_autoload_register( function ( $class ) {
 		FLAVOR_EDGE_DIR . 'includes/' . $relative . '.php',
 		FLAVOR_EDGE_DIR . 'includes/modules/' . $relative . '.php',
 		FLAVOR_EDGE_DIR . 'includes/admin/' . $relative . '.php',
+		FLAVOR_EDGE_DIR . 'includes/speculation/' . $relative . '.php',
 	);
 
 	foreach ( $paths as $path ) {

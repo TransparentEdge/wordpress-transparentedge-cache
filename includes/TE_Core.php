@@ -58,6 +58,9 @@ class TE_Core {
 		// Sitemap preload (warm Varnish after purge).
 		TE_Preload::init();
 
+		// Speculation Rules (prefetch/prerender for faster navigation).
+		TE_Speculation_Rules::init();
+
 		// Heartbeat API control.
 		TE_Heartbeat::init();
 

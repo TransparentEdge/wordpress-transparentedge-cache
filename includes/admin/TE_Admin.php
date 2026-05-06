@@ -273,6 +273,7 @@ class TE_Admin {
 			'preload_sitemap',
 			'heartbeat_disable_admin', 'heartbeat_disable_editor',
 			'debug_mode',
+			'speculation_enabled',
 		);
 
 		foreach ( $checkboxes as $key ) {
@@ -295,12 +296,33 @@ class TE_Admin {
 			'invalidation_method', 'i3_max_length', 'delay_js_exclusions', 'defer_js_exclusions', 'combine_js_exclusions',
 			'excluded_urls', 'excluded_cookies', 'dns_prefetch_urls', 'accepted_query_strings',
 			'heartbeat_behavior',
+			'speculation_mode', 'speculation_injection',
 		);
 
 		foreach ( $text_fields as $key ) {
 			if ( isset( $raw[ $key ] ) ) {
 				$settings[ $key ] = sanitize_textarea_field( $raw[ $key ] );
 			}
+		}
+
+		// Speculation Rules: post types (array of strings).
+		if ( isset( $raw['speculation_post_types'] ) && is_array( $raw['speculation_post_types'] ) ) {
+			$settings['speculation_post_types'] = array_map( 'sanitize_key', $raw['speculation_post_types'] );
+		} elseif ( isset( $raw['speculation_enabled'] ) ) {
+			// If speculation tab was submitted but no post types checked, set empty.
+			$settings['speculation_post_types'] = array();
+		}
+
+		// Validate speculation_mode.
+		$valid_modes = array( 'conservative', 'balanced', 'aggressive' );
+		if ( ! in_array( $settings['speculation_mode'] ?? '', $valid_modes, true ) ) {
+			$settings['speculation_mode'] = 'balanced';
+		}
+
+		// Validate speculation_injection.
+		$valid_injection = array( 'php', 'vcl' );
+		if ( ! in_array( $settings['speculation_injection'] ?? '', $valid_injection, true ) ) {
+			$settings['speculation_injection'] = 'php';
 		}
 
 		// Connection credentials (also saved via Test Connection, but handle save too).

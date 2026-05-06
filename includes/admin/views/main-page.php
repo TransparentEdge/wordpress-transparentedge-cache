@@ -113,6 +113,9 @@ defined( 'ABSPATH' ) || exit;
 		<button class="te-tab" data-tab="invalidation"><?php esc_html_e( 'Invalidation', 'flavor-edge-cache' ); ?></button>
 		<button class="te-tab" data-tab="i3"><?php esc_html_e( 'i3 Images', 'flavor-edge-cache' ); ?></button>
 		<button class="te-tab" data-tab="optimization"><?php esc_html_e( 'Optimization', 'flavor-edge-cache' ); ?></button>
+		<?php if ( \flavor_edge\TE_Speculation_Rules::is_available() ) : ?>
+		<button class="te-tab" data-tab="speculation"><?php esc_html_e( 'Speculation Rules', 'flavor-edge-cache' ); ?></button>
+		<?php endif; ?>
 		<button class="te-tab" data-tab="advanced"><?php esc_html_e( 'Advanced', 'flavor-edge-cache' ); ?></button>
 		<button class="te-tab" data-tab="log"><?php esc_html_e( 'Invalidation', 'flavor-edge-cache' ); ?></button>
 	</div>
@@ -646,6 +649,17 @@ defined( 'ABSPATH' ) || exit;
 				</tr>
 			</table>
 		</div>
+
+		<?php if ( \flavor_edge\TE_Speculation_Rules::is_available() ) : ?>
+		<!-- SPECULATION RULES TAB -->
+		<div class="te-panel" data-panel="speculation">
+			<h2><?php esc_html_e( 'Speculation Rules', 'flavor-edge-cache' ); ?></h2>
+			<p class="description" style="margin-bottom: 16px;">
+				<?php esc_html_e( 'Accelerate page-to-page navigation by telling the browser to prefetch or prerender links before the user clicks.', 'flavor-edge-cache' ); ?>
+			</p>
+			<?php include FLAVOR_EDGE_DIR . 'includes/admin/views/tab-speculation.php'; ?>
+		</div>
+		<?php endif; ?>
 
 		<!-- ADVANCED TAB -->
 		<div class="te-panel" data-panel="advanced">

@@ -3,7 +3,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.2.0\n"
+"Project-Id-Version: Transparent Edge Cache 1.3.0\n"
 "PO-Revision-Date: 2026-03-31 13:00+0000\n"
 "Language: es_ES\n"
 "MIME-Version: 1.0\n"
@@ -894,3 +894,77 @@ msgstr "⚠ Transparent Edge API no disponible."
 
 msgid "Please wait a few seconds between purge actions."
 msgstr "Por favor, espera unos segundos entre acciones de purga."
+
+#: v1.3.0 — Speculation Rules
+
+msgid "Speculation Rules"
+msgstr "Speculation Rules"
+
+msgid "Enable Speculation Rules"
+msgstr "Activar Speculation Rules"
+
+msgid "Inject Speculation Rules header for faster page-to-page navigation"
+msgstr "Inyectar la cabecera Speculation Rules para acelerar la navegación entre páginas"
+
+msgid "Tells modern browsers (Chrome 109+) to prefetch or prerender links before the user clicks. Progressive enhancement — ignored by unsupported browsers."
+msgstr "Indica a navegadores modernos (Chrome 109+) que hagan prefetch o prerender de enlaces antes de que el usuario haga clic. Mejora progresiva — los navegadores sin soporte lo ignoran."
+
+msgid "Mode"
+msgstr "Modo"
+
+msgid "Conservative"
+msgstr "Conservador"
+
+msgid "Prefetch on click/pointerdown only. Lowest origin load. Recommended for high-traffic sites and sites with a dedicated mid-tier."
+msgstr "Prefetch solo al hacer clic. Menor carga al origen. Recomendado para sitios de alto tráfico y con mid-tier dedicado."
+
+msgid "Balanced"
+msgstr "Equilibrado"
+
+msgid "Prefetch on hover. Good balance between speed and origin load. Recommended for most sites."
+msgstr "Prefetch al pasar el ratón. Buen equilibrio entre velocidad y carga al origen. Recomendado para la mayoría de sitios."
+
+msgid "Aggressive"
+msgstr "Agresivo"
+
+msgid "Prefetch on hover + prerender on click. Fastest navigation, but runs JavaScript on speculative pages."
+msgstr "Prefetch al pasar el ratón + prerender al hacer clic. Navegación más rápida, pero ejecuta JavaScript en páginas especulativas."
+
+msgid "Post types to prefetch"
+msgstr "Tipos de contenido a prefetchear"
+
+msgid "Only links to these post types will be prefetched. Unchecked types are excluded from speculation."
+msgstr "Solo los enlaces a estos tipos de contenido se prefetchearán. Los tipos desmarcados se excluyen de la especulación."
+
+msgid "Header injection"
+msgstr "Inyección de cabecera"
+
+msgid "PHP (origin) — Header added by WordPress"
+msgstr "PHP (origen) — Cabecera añadida por WordPress"
+
+msgid "VCL (edge) — Header added by Varnish. Recommended if VCL Snippets are enabled."
+msgstr "VCL (edge) — Cabecera añadida por Varnish. Recomendado si los snippets VCL están activados."
+
+msgid "Copy the VCL snippet below and deploy it from your Transparent Edge dashboard."
+msgstr "Copia el snippet VCL de abajo y despliégalo desde tu dashboard de Transparent Edge."
+
+msgid "VCL Snippet"
+msgstr "Snippet VCL"
+
+msgid "Copy VCL"
+msgstr "Copiar VCL"
+
+msgid "Preview"
+msgstr "Vista previa"
+
+msgid "View generated JSON"
+msgstr "Ver JSON generado"
+
+msgid "Open Chrome DevTools → Application → Speculative loads to verify rules are active."
+msgstr "Abre Chrome DevTools → Application → Speculative loads para verificar que las reglas están activas."
+
+msgid "Enable Speculation Rules to preview the generated JSON."
+msgstr "Activa Speculation Rules para ver una vista previa del JSON generado."
+
+msgid "Accelerate page-to-page navigation by telling the browser to prefetch or prerender links before the user clicks."
+msgstr "Acelera la navegación entre páginas indicando al navegador que haga prefetch o prerender de enlaces antes de que el usuario haga clic."
