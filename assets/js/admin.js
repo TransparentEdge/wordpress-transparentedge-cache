@@ -80,8 +80,21 @@
             var name = $el.attr('name');
             if (!name) return;
 
-            if ($el.is(':checkbox')) {
-                formData[name] = $el.is(':checked') ? '1' : '';
+            if ($el.is(':radio')) {
+                // Only capture the selected radio.
+                if ($el.is(':checked')) {
+                    formData[name] = $el.val();
+                }
+            } else if ($el.is(':checkbox')) {
+                if (name.indexOf('[]') !== -1) {
+                    // Array checkbox (e.g., speculation_post_types[]).
+                    if ($el.is(':checked')) {
+                        if (!formData[name]) formData[name] = [];
+                        formData[name].push($el.val());
+                    }
+                } else {
+                    formData[name] = $el.is(':checked') ? '1' : '';
+                }
             } else {
                 formData[name] = $el.val();
             }
