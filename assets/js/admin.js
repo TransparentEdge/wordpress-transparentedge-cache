@@ -88,9 +88,10 @@
             } else if ($el.is(':checkbox')) {
                 if (name.indexOf('[]') !== -1) {
                     // Array checkbox (e.g., speculation_post_types[]).
+                    var cleanName = name.replace('[]', '');
                     if ($el.is(':checked')) {
-                        if (!formData[name]) formData[name] = [];
-                        formData[name].push($el.val());
+                        if (!formData[cleanName]) formData[cleanName] = [];
+                        formData[cleanName].push($el.val());
                     }
                 } else {
                     formData[name] = $el.is(':checked') ? '1' : '';
@@ -100,7 +101,10 @@
             }
         });
 
-        console.log('[TE Cache] Saving settings:', Object.keys(formData).length, 'fields', Object.keys(formData));
+        console.log('[TE Cache] Saving settings:', Object.keys(formData).length, 'fields');
+        console.log('[TE Cache] speculation_mode:', formData['speculation_mode'] || 'NOT SET');
+        console.log('[TE Cache] speculation_injection:', formData['speculation_injection'] || 'NOT SET');
+        console.log('[TE Cache] speculation_post_types:', formData['speculation_post_types'] || 'NOT SET');
 
         $btn.prop('disabled', true);
         $status.text(FE.strings.saving).removeClass('te-status-success te-status-error');
