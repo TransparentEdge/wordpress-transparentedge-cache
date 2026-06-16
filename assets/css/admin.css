@@ -50,9 +50,10 @@
 	gap: 0;
 	border-bottom: 2px solid #0073aa;
 	margin-bottom: 0;
+	position: relative;
 }
 .te-tab {
-	padding: 10px 16px;
+	padding: 8px 14px;
 	background: #f1f1f1;
 	border: 1px solid #ccc;
 	border-bottom: none;
@@ -64,6 +65,7 @@
 	margin-right: 2px;
 	margin-bottom: -2px;
 	transition: all 0.15s;
+	white-space: nowrap;
 }
 .te-tab:hover { background: #e8e8e8; color: #333; }
 .te-tab.active {

@@ -117,7 +117,7 @@ defined( 'ABSPATH' ) || exit;
 		<button class="te-tab" data-tab="speculation"><?php esc_html_e( 'Speculation Rules', 'flavor-edge-cache' ); ?></button>
 		<?php endif; ?>
 		<button class="te-tab" data-tab="advanced"><?php esc_html_e( 'Advanced', 'flavor-edge-cache' ); ?></button>
-		<button class="te-tab" data-tab="log"><?php esc_html_e( 'Invalidation', 'flavor-edge-cache' ); ?></button>
+		<button class="te-tab" data-tab="log"><?php esc_html_e( 'History', 'flavor-edge-cache' ); ?></button>
 	</div>
 
 	<form id="te-settings-form">
