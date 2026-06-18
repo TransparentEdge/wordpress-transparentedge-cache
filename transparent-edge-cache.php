@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.3.1
+ * Version:           1.4.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.3.1' );
+define( 'FLAVOR_EDGE_VERSION', '1.4.0' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -147,10 +147,77 @@ function flavor_edge_activate_single() {
 		\flavor_edge\TE_BrowserCache::update_htaccess();
 	}
 
+	// Check write permissions on cache directories.
+	flavor_edge_check_directory_permissions();
+
 	// Flush rewrite rules.
 	flush_rewrite_rules();
 }
 register_activation_hook( __FILE__, 'flavor_edge_activate' );
+
+/**
+ * Check write permissions on directories the plugin needs.
+ * Stores unwritable paths as an option for display in admin notices.
+ */
+function flavor_edge_check_directory_permissions() {
+	$base_dir    = WP_CONTENT_DIR . '/cache/flavor-edge';
+	$directories = array(
+		$base_dir,
+		$base_dir . '/min',
+		$base_dir . '/fonts',
+	);
+
+	$unwritable = array();
+
+	foreach ( $directories as $dir ) {
+		if ( ! file_exists( $dir ) ) {
+			// Try to create it.
+			if ( ! wp_mkdir_p( $dir ) ) {
+				$unwritable[] = $dir;
+				continue;
+			}
+		}
+		if ( ! is_writable( $dir ) ) {
+			$unwritable[] = $dir;
+		}
+	}
+
+	if ( ! empty( $unwritable ) ) {
+		update_option( 'flavor_edge_unwritable_dirs', $unwritable );
+	} else {
+		delete_option( 'flavor_edge_unwritable_dirs' );
+	}
+}
+
+/**
+ * Show admin notice for unwritable directories.
+ */
+function flavor_edge_permission_notice() {
+	$dirs = get_option( 'flavor_edge_unwritable_dirs' );
+	if ( empty( $dirs ) || ! is_array( $dirs ) ) {
+		return;
+	}
+
+	// Only show on plugin pages and dashboard.
+	$screen = get_current_screen();
+	if ( ! $screen || ! in_array( $screen->id, array( 'toplevel_page_flavor-edge-cache', 'dashboard' ), true ) ) {
+		return;
+	}
+
+	$commands = array();
+	foreach ( $dirs as $dir ) {
+		$commands[] = 'mkdir -p ' . $dir . ' && chown www-data:www-data ' . $dir . ' && chmod 775 ' . $dir;
+	}
+
+	printf(
+		'<div class="notice notice-error"><p><strong>%s</strong></p><p>%s</p><pre style="background:#f0f0f1;padding:10px;overflow-x:auto;">%s</pre><p>%s</p></div>',
+		esc_html__( 'Transparent Edge Cache — Write permissions required', 'flavor-edge-cache' ),
+		esc_html__( 'The following directories are not writable. CSS/JS combine and Google Fonts self-hosting will not work until this is resolved:', 'flavor-edge-cache' ),
+		esc_html( implode( "\n", $commands ) ),
+		esc_html__( 'After fixing permissions, deactivate and reactivate the plugin to dismiss this notice.', 'flavor-edge-cache' )
+	);
+}
+add_action( 'admin_notices', 'flavor_edge_permission_notice' );
 
 /**
  * Drop legacy purge log table (replaced by TE dashboard).

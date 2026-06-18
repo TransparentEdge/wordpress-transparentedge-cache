@@ -968,3 +968,51 @@ msgstr "Activa Speculation Rules para ver una vista previa del JSON generado."
 
 msgid "Accelerate page-to-page navigation by telling the browser to prefetch or prerender links before the user clicks."
 msgstr "Acelera la navegación entre páginas indicando al navegador que haga prefetch o prerender de enlaces antes de que el usuario haga clic."
+
+#: v1.3.1 — Missing translations
+
+msgid "⚠ Important: Aggressive mode runs JavaScript on speculative pages."
+msgstr "⚠ Importante: El modo Agresivo ejecuta JavaScript en páginas especulativas."
+
+msgid "This can trigger analytics, remarketing pixels (Facebook, LinkedIn, Criteo), and third-party API calls before the user actually visits the page. Make sure your analytics implementation filters requests with the Sec-Purpose: prefetch header before enabling this mode."
+msgstr "Esto puede disparar analytics, píxeles de remarketing (Facebook, LinkedIn, Criteo) y llamadas a APIs de terceros antes de que el usuario visite la página. Asegúrate de que tu implementación de analytics filtra peticiones con la cabecera Sec-Purpose: prefetch antes de activar este modo."
+
+msgid "History"
+msgstr "Historial"
+
+msgid "Redis AUTH failed. Check WP_REDIS_PASSWORD in wp-config.php."
+msgstr "Autenticación Redis fallida. Revisa WP_REDIS_PASSWORD en wp-config.php."
+
+msgid "Redis server requires a password. Add to wp-config.php:"
+msgstr "El servidor Redis requiere contraseña. Añade a wp-config.php:"
+
+msgid "Redis server running, but PHP extension (phpredis) is not installed. Install it with: sudo apt install php-redis && sudo systemctl restart php-fpm"
+msgstr "Servidor Redis activo, pero la extensión PHP (phpredis) no está instalada. Instálala con: sudo apt install php-redis && sudo systemctl restart php-fpm"
+
+msgid ""
+"⚠ Aggressive mode runs JavaScript on speculative pages.\n"
+"\n"
+"This can trigger analytics, remarketing pixels, and third-party API calls before the user visits the page.\n"
+"\n"
+"Make sure your analytics filters requests with Sec-Purpose: prefetch.\n"
+"\n"
+"Do you want to continue?"
+msgstr ""
+"⚠ El modo Agresivo ejecuta JavaScript en páginas especulativas.\n"
+"\n"
+"Esto puede disparar analytics, píxeles de remarketing y llamadas a APIs de terceros antes de que el usuario visite la página.\n"
+"\n"
+"Asegúrate de que tu analytics filtra peticiones con Sec-Purpose: prefetch.\n"
+"\n"
+"¿Deseas continuar?"
+
+#: v1.4.0 — Permission checks
+
+msgid "Transparent Edge Cache — Write permissions required"
+msgstr "Transparent Edge Cache — Permisos de escritura necesarios"
+
+msgid "The following directories are not writable. CSS/JS combine and Google Fonts self-hosting will not work until this is resolved:"
+msgstr "Los siguientes directorios no tienen permisos de escritura. El combinado de CSS/JS y el auto-alojamiento de Google Fonts no funcionarán hasta que se resuelva:"
+
+msgid "After fixing permissions, deactivate and reactivate the plugin to dismiss this notice."
+msgstr "Después de corregir los permisos, desactiva y reactiva el plugin para ocultar este aviso."

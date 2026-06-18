@@ -364,6 +364,11 @@ class TE_Minify {
 			return;
 		}
 
+		// Fallback: if cache dir is not writable, skip combine entirely.
+		if ( ! self::is_cache_writable() ) {
+			return;
+		}
+
 		$to_combine = array();
 		$combined_content = '';
 		$hash_parts = array();
@@ -442,6 +447,11 @@ class TE_Minify {
 	public static function combine_js_files() {
 		global $wp_scripts;
 		if ( empty( $wp_scripts ) || empty( $wp_scripts->queue ) ) {
+			return;
+		}
+
+		// Fallback: if cache dir is not writable, skip combine entirely.
+		if ( ! self::is_cache_writable() ) {
 			return;
 		}
 
@@ -574,6 +584,23 @@ class TE_Minify {
 	 */
 	public static function get_cache_url() {
 		return content_url( self::CACHE_DIR );
+	}
+
+	/**
+	 * Check if the cache directory exists and is writable.
+	 * Attempts to create it if missing. Returns false without error
+	 * so the plugin degrades gracefully (serves originals instead of combined).
+	 *
+	 * @return bool
+	 */
+	private static function is_cache_writable() {
+		$dir = self::get_cache_dir();
+		if ( ! file_exists( $dir ) ) {
+			if ( ! wp_mkdir_p( $dir ) ) {
+				return false;
+			}
+		}
+		return is_writable( $dir );
 	}
 
 	/**
