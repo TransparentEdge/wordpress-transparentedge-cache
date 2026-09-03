@@ -113,6 +113,41 @@ class TE_Settings {
 			'speculation_mode'       => 'balanced',      // 'conservative', 'balanced', 'aggressive'.
 			'speculation_post_types' => array( 'post', 'page' ),
 			'speculation_injection'  => 'php',           // 'php' (origin) or 'vcl' (edge).
+
+			// Remove Unused CSS (v1.5.0).
+			'remove_unused_css'      => false,
+			'ucss_exclusions'        => '',
+
+			// Image optimization extras (v1.5.0).
+			'lazyload_bg_images'     => false,
+
+			// Mobile cache (v1.5.0).
+			'mobile_cache'           => false,
+
+			// Security: vulnerability scanner (v1.6.0).
+
+			// Security: local hardening (v1.6.0).
+			'harden_disable_xmlrpc'     => false,
+			'harden_limit_login'        => false,
+			'harden_login_max_attempts' => 5,
+			'harden_block_php_uploads'  => false,
+
+			// Security: headers (v1.6.0). VCL recommender + optional PHP fallback.
+			'sec_headers_php_fallback'     => false,
+			'sec_header_hsts'              => false,
+			'sec_header_hsts_maxage'       => 31536000,
+			'sec_header_hsts_subdomains'   => false,
+			'sec_header_hsts_preload'      => false,
+			'sec_header_nosniff'           => true,
+			'sec_header_referrer'          => true,
+			'sec_header_referrer_value'    => 'strict-origin-when-cross-origin',
+			'sec_header_permissions'       => false,
+			'sec_header_permissions_value' => 'geolocation=(), microphone=(), camera=()',
+			'sec_header_frame'             => true,
+			'sec_header_frame_value'       => 'SAMEORIGIN',
+			'sec_header_csp'               => false,
+			'sec_header_csp_value'         => '',
+			'sec_header_csp_enforce'       => false,
 		);
 	}
 

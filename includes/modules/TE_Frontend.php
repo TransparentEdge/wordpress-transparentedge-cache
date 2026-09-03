@@ -75,6 +75,9 @@ class TE_Frontend {
 		if ( $s['lazyload_iframes'] ) {
 			$html = self::apply_lazyload_iframes( $html );
 		}
+		if ( ! empty( $s['lazyload_bg_images'] ) ) {
+			$html = self::apply_lazyload_bg_images( $html );
+		}
 
 		// 2. Preload LCP image.
 		if ( $s['preload_lcp'] ) {
@@ -159,6 +162,64 @@ class TE_Frontend {
 		}, $html );
 	}
 
+	/**
+	 * Lazy load CSS background images set via inline style="background-image:url()".
+	 *
+	 * Converts inline background-image declarations into data attributes and
+	 * loads them with an IntersectionObserver when they approach the viewport.
+	 * Elements above the fold are left untouched to avoid harming LCP.
+	 *
+	 * @param string $html HTML content.
+	 * @return string
+	 */
+	private static function apply_lazyload_bg_images( $html ) {
+		$count = 0;
+		$found = false;
+
+		$html = preg_replace_callback(
+			'/<([a-z0-9]+)([^>]*?)style=(["\'])([^"\']*background(?:-image)?\s*:\s*url\([^)]+\)[^"\']*)\3([^>]*)>/i',
+			function ( $matches ) use ( &$count, &$found ) {
+				$count++;
+				// Skip the first 2 elements with background images (likely above the fold / LCP).
+				if ( $count <= 2 ) {
+					return $matches[0];
+				}
+
+				// Skip if explicitly opted out.
+				if ( preg_match( '/data-no-lazy|skip-lazy|no-lazy/i', $matches[0] ) ) {
+					return $matches[0];
+				}
+
+				$found = true;
+				$tag   = $matches[1];
+				$before = $matches[2];
+				$style  = $matches[4];
+				$after  = $matches[5];
+
+				// Move the background style into a data attribute.
+				return sprintf(
+					'<%s%s data-flavor-bg="%s"%s>',
+					$tag,
+					$before,
+					esc_attr( $style ),
+					$after
+				);
+			},
+			$html
+		);
+
+		// Inject the tiny IntersectionObserver loader once, only if we deferred something.
+		if ( $found ) {
+			$script = '<script>(function(){var els=document.querySelectorAll("[data-flavor-bg]");'
+				. 'if(!("IntersectionObserver" in window)){els.forEach(function(e){e.setAttribute("style",e.getAttribute("data-flavor-bg"));e.removeAttribute("data-flavor-bg");});return;}'
+				. 'var io=new IntersectionObserver(function(entries,o){entries.forEach(function(en){if(en.isIntersecting){var el=en.target;el.setAttribute("style",el.getAttribute("data-flavor-bg"));el.removeAttribute("data-flavor-bg");o.unobserve(el);}});},{rootMargin:"200px"});'
+				. 'els.forEach(function(e){io.observe(e);});})();</script>';
+			$html = str_replace( '</body>', $script . '</body>', $html );
+		}
+
+		return $html;
+	}
+
 	// -------------------------------------------------------------------------
 	// Preload LCP Image.
 	// -------------------------------------------------------------------------
@@ -241,6 +302,20 @@ class TE_Frontend {
 		);
 
 		$exclude_patterns = array_merge( $always_exclude, $exclude_patterns );
+
+		// Dependency-tree protection: if a script that WON'T be delayed depends on
+		// another script, that dependency must not be delayed either (otherwise the
+		// dependent runs before its dependency exists — e.g. "Backbone is not defined").
+		// We compute the protected dependencies and add their src fragments to the
+		// exclusion list automatically, so no manual maintenance of dependency names
+		// is required.
+		if ( class_exists( __NAMESPACE__ . '\\TE_Dependency_Resolver' ) && function_exists( 'wp_scripts' ) ) {
+			$optimized = TE_Dependency_Resolver::handles_matching_optimization( $exclude_patterns );
+			$protected = TE_Dependency_Resolver::protected_src_fragments( $optimized );
+			if ( ! empty( $protected ) ) {
+				$exclude_patterns = array_merge( $exclude_patterns, $protected );
+			}
+		}
 
 		// Process <script> tags.
 		$html = preg_replace_callback(

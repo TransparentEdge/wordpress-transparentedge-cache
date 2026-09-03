@@ -116,6 +116,7 @@ defined( 'ABSPATH' ) || exit;
 		<?php if ( \flavor_edge\TE_Speculation_Rules::is_available() ) : ?>
 		<button class="te-tab" data-tab="speculation"><?php esc_html_e( 'Speculation Rules', 'flavor-edge-cache' ); ?></button>
 		<?php endif; ?>
+		<button class="te-tab" data-tab="security"><?php esc_html_e( 'Security', 'flavor-edge-cache' ); ?></button>
 		<button class="te-tab" data-tab="advanced"><?php esc_html_e( 'Advanced', 'flavor-edge-cache' ); ?></button>
 		<button class="te-tab" data-tab="log"><?php esc_html_e( 'History', 'flavor-edge-cache' ); ?></button>
 	</div>
@@ -525,6 +526,18 @@ defined( 'ABSPATH' ) || exit;
 						<p class="description"><?php esc_html_e( 'Concatenates all local stylesheets into one file. External and conditional CSS are preserved. Includes minification automatically.', 'flavor-edge-cache' ); ?></p>
 					</td>
 				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Remove Unused CSS', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="remove_unused_css" value="1" <?php checked( ! empty( $settings['remove_unused_css'] ) ); ?> />
+						<?php esc_html_e( 'Serve only the CSS each page actually uses (major LCP improvement)', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Used CSS is generated in the background per template and served inline; the rest is deferred. Generation never blocks visitors, and if it fails the original CSS is served unchanged.', 'flavor-edge-cache' ); ?></p>
+						<p style="margin-top:6px;">
+							<label style="display:block;font-weight:600;"><?php esc_html_e( 'Exclusions (one handle or URL fragment per line):', 'flavor-edge-cache' ); ?></label>
+							<textarea name="ucss_exclusions" rows="3" class="large-text code" placeholder="admin-bar&#10;dashicons"><?php echo esc_textarea( $settings['ucss_exclusions'] ?? '' ); ?></textarea>
+						</p>
+					</td>
+				</tr>
 
 				<tr>
 					<th colspan="2"><h3 style="margin:0"><?php esc_html_e( 'JavaScript', 'flavor-edge-cache' ); ?></h3></th>
@@ -601,6 +614,14 @@ defined( 'ABSPATH' ) || exit;
 					</td>
 				</tr>
 				<tr>
+					<th><?php esc_html_e( 'Lazy Load Background Images', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="lazyload_bg_images" value="1" <?php checked( ! empty( $settings['lazyload_bg_images'] ) ); ?> />
+						<?php esc_html_e( 'Defer CSS background images (inline style) until they approach the viewport', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'The first two background images are kept eager to protect LCP. Add data-no-lazy to opt an element out.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th><?php esc_html_e( 'Preload LCP Image', 'flavor-edge-cache' ); ?></th>
 					<td>
 						<label><input type="checkbox" name="preload_lcp" value="1" <?php checked( $settings['preload_lcp'] ); ?> />
@@ -660,6 +681,11 @@ defined( 'ABSPATH' ) || exit;
 			<?php include FLAVOR_EDGE_DIR . 'includes/admin/views/tab-speculation.php'; ?>
 		</div>
 		<?php endif; ?>
+
+		<!-- SECURITY TAB -->
+		<div class="te-panel" data-panel="security">
+			<?php include FLAVOR_EDGE_DIR . 'includes/admin/views/tab-security.php'; ?>
+		</div>
 
 		<!-- ADVANCED TAB -->
 		<div class="te-panel" data-panel="advanced">

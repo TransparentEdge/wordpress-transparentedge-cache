@@ -61,6 +61,12 @@ class TE_Core {
 		// Speculation Rules (prefetch/prerender for faster navigation).
 		TE_Speculation_Rules::init();
 
+		// Remove Unused CSS / Critical CSS.
+		TE_UnusedCSS::init();
+
+		// Security module (vulnerability scanner, hardening).
+		TE_Security::init();
+
 		// Heartbeat API control.
 		TE_Heartbeat::init();
 

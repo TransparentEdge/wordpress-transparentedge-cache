@@ -108,10 +108,45 @@ class TE_Minify {
 			}
 		}
 
+		// Dependency-tree protection: don't defer a script if a non-deferred script
+		// depends on it. Deferred scripts execute after HTML parsing, so a
+		// non-deferred dependent would run before this dependency is ready.
+		if ( self::is_defer_dependency_protected( $handle ) ) {
+			return $tag;
+		}
+
 		// Add defer.
 		$tag = str_replace( ' src=', ' defer src=', $tag );
 
 		return $tag;
+	}
+
+	/**
+	 * Whether a handle must be protected from defer because a non-deferred
+	 * script depends on it (directly or transitively).
+	 *
+	 * Cached per-request since add_defer_attribute is called once per script.
+	 *
+	 * @param string $handle Script handle.
+	 * @return bool
+	 */
+	private static function is_defer_dependency_protected( $handle ) {
+		static $protected = null;
+
+		if ( null === $protected ) {
+			$protected = array();
+			if ( class_exists( 'flavor_edge\\TE_Dependency_Resolver' ) && function_exists( 'wp_scripts' ) ) {
+				$user_exclude = array_filter( array_map( 'trim', explode( "\n", TE_Settings::get( 'defer_js_exclusions', '' ) ) ) );
+				$always = array( 'jquery-core', 'jquery', 'jquery-migrate', 'wp-polyfill', 'wp-hooks', 'wp-i18n' );
+				$patterns = array_merge( $always, $user_exclude );
+
+				$optimized = \flavor_edge\TE_Dependency_Resolver::handles_matching_optimization( $patterns );
+				$rescued   = \flavor_edge\TE_Dependency_Resolver::compute_protected( $optimized );
+				$protected = array_flip( $rescued );
+			}
+		}
+
+		return isset( $protected[ $handle ] );
 	}
 
 	// -------------------------------------------------------------------------
@@ -463,6 +498,18 @@ class TE_Minify {
 		// User exclusions for combine.
 		$user_exclude = array_filter( array_map( 'trim', explode( "\n", TE_Settings::get( 'combine_js_exclusions', '' ) ) ) );
 		$all_exclude = array_merge( self::$combine_exclude, $user_exclude );
+
+		// Dependency-tree protection: if an excluded (non-combined) script depends
+		// on a script that would be combined, protect that dependency from being
+		// combined too — keeping load order intact. Adds the protected handles to
+		// the exclusion set automatically.
+		if ( class_exists( 'flavor_edge\\TE_Dependency_Resolver' ) ) {
+			$optimized = \flavor_edge\TE_Dependency_Resolver::handles_matching_optimization( $all_exclude );
+			$rescued   = \flavor_edge\TE_Dependency_Resolver::compute_protected( $optimized );
+			if ( ! empty( $rescued ) ) {
+				$all_exclude = array_merge( $all_exclude, $rescued );
+			}
+		}
 
 		foreach ( $wp_scripts->queue as $handle ) {
 			if ( ! isset( $wp_scripts->registered[ $handle ] ) ) {

@@ -243,6 +243,11 @@ class TE_Admin {
 
 			// Clear any cached token.
 			delete_transient( 'flavor_edge_api_token' );
+
+			// Clear cached services so gating reflects the new company.
+			if ( class_exists( 'flavor_edge\\TE_Capabilities' ) ) {
+				TE_Capabilities::clear_cache();
+			}
 		}
 
 		wp_send_json( $result );
@@ -261,6 +266,9 @@ class TE_Admin {
 		$raw      = $_POST['settings'] ?? array();
 		$settings = TE_Settings::get_all();
 
+		// Snapshot for change detection (side effects should only fire on real changes).
+		$old_settings = $settings;
+
 		// Map form fields to settings.
 		$checkboxes = array(
 			'enabled', 'headers_enabled', 'surrogate_keys', 'vary_device', 'vary_language',
@@ -274,6 +282,14 @@ class TE_Admin {
 			'heartbeat_disable_admin', 'heartbeat_disable_editor',
 			'debug_mode',
 			'speculation_enabled',
+			// WPO v1.5.0
+			'remove_unused_css', 'lazyload_bg_images', 'mobile_cache',
+			// Security v1.6.0
+			'harden_disable_xmlrpc', 'harden_limit_login', 'harden_block_php_uploads',
+			'sec_headers_php_fallback',
+			'sec_header_hsts', 'sec_header_hsts_subdomains', 'sec_header_hsts_preload',
+			'sec_header_nosniff', 'sec_header_referrer', 'sec_header_permissions',
+			'sec_header_frame', 'sec_header_csp', 'sec_header_csp_enforce',
 		);
 
 		foreach ( $checkboxes as $key ) {
@@ -284,6 +300,7 @@ class TE_Admin {
 			'html_s_maxage', 'html_max_age', 'static_s_maxage', 'static_max_age',
 			'i3_quality_jpeg', 'i3_quality_webp', 'i3_s_maxage', 'i3_max_age',
 			'debounce_seconds', 'heartbeat_interval',
+			'harden_login_max_attempts', 'sec_header_hsts_maxage',
 		);
 
 		foreach ( $numbers as $key ) {
@@ -297,6 +314,8 @@ class TE_Admin {
 			'excluded_urls', 'excluded_cookies', 'dns_prefetch_urls', 'accepted_query_strings',
 			'heartbeat_behavior',
 			'speculation_mode', 'speculation_injection',
+			'ucss_exclusions',
+			'sec_header_referrer_value', 'sec_header_permissions_value', 'sec_header_frame_value', 'sec_header_csp_value',
 		);
 
 		foreach ( $text_fields as $key ) {
@@ -334,6 +353,26 @@ class TE_Admin {
 		}
 
 		TE_Settings::save( $settings );
+
+		// Side effects that depend on the new settings.
+
+		// Uploads PHP protection (.htaccess) — only act if the value changed.
+		$was_protected = ! empty( $old_settings['harden_block_php_uploads'] );
+		$now_protected = ! empty( $settings['harden_block_php_uploads'] );
+		if ( $now_protected !== $was_protected ) {
+			if ( $now_protected ) {
+				TE_Hardening::protect_uploads();
+			} else {
+				TE_Hardening::unprotect_uploads();
+			}
+		}
+
+		// If Remove Unused CSS was toggled off, clear its cache.
+		$ucss_was_on = ! empty( $old_settings['remove_unused_css'] );
+		$ucss_now_on = ! empty( $settings['remove_unused_css'] );
+		if ( $ucss_was_on && ! $ucss_now_on && class_exists( 'flavor_edge\\TE_UnusedCSS' ) ) {
+			TE_UnusedCSS::clear_cache();
+		}
 
 		do_action( 'flavor_edge_settings_saved', $settings );
 

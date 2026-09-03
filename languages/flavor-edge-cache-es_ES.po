@@ -1016,3 +1016,100 @@ msgstr "Los siguientes directorios no tienen permisos de escritura. El combinado
 
 msgid "After fixing permissions, deactivate and reactivate the plugin to dismiss this notice."
 msgstr "Después de corregir los permisos, desactiva y reactiva el plugin para ocultar este aviso."
+#: v1.5.0 — WPO + Security
+
+msgid "Remove Unused CSS"
+msgstr "Eliminar CSS no usado"
+
+msgid "Serve only the CSS each page actually uses (major LCP improvement)"
+msgstr "Servir solo el CSS que cada página usa realmente (gran mejora de LCP)"
+
+msgid "Used CSS is generated in the background per template and served inline; the rest is deferred. Generation never blocks visitors, and if it fails the original CSS is served unchanged."
+msgstr "El CSS usado se genera en segundo plano por plantilla y se sirve inline; el resto se difiere. La generación nunca bloquea a los visitantes, y si falla se sirve el CSS original sin cambios."
+
+msgid "Exclusions (one handle or URL fragment per line):"
+msgstr "Exclusiones (un handle o fragmento de URL por línea):"
+
+msgid "Lazy Load Background Images"
+msgstr "Lazy Load de imágenes de fondo"
+
+msgid "Defer CSS background images (inline style) until they approach the viewport"
+msgstr "Diferir imágenes de fondo CSS (estilo inline) hasta que se acerquen al viewport"
+
+msgid "The first two background images are kept eager to protect LCP. Add data-no-lazy to opt an element out."
+msgstr "Las dos primeras imágenes de fondo se mantienen activas para proteger el LCP. Añade data-no-lazy para excluir un elemento."
+
+msgid "Security"
+msgstr "Seguridad"
+
+msgid "Transparent Edge security services"
+msgstr "Servicios de seguridad de Transparent Edge"
+
+msgid "Detected from your Transparent Edge account."
+msgstr "Detectados desde tu cuenta de Transparent Edge."
+
+msgid "Local hardening"
+msgstr "Endurecimiento local"
+
+msgid "WordPress-level protections. Available for all clients."
+msgstr "Protecciones a nivel de WordPress. Disponibles para todos los clientes."
+
+msgid "Block PHP in uploads"
+msgstr "Bloquear PHP en uploads"
+
+msgid "Prevent execution of PHP files inside /wp-content/uploads/ (Apache)"
+msgstr "Impedir la ejecución de archivos PHP dentro de /wp-content/uploads/ (Apache)"
+
+msgid "On Nginx, add the equivalent rule to your server config (shown after saving)."
+msgstr "En Nginx, añade la regla equivalente a la configuración de tu servidor (se muestra tras guardar)."
+
+msgid "Disable XML-RPC"
+msgstr "Desactivar XML-RPC"
+
+msgid "Disable xmlrpc.php (leave off if you use Jetpack or the WordPress mobile app)"
+msgstr "Desactivar xmlrpc.php (déjalo desactivado si usas Jetpack o la app móvil de WordPress)"
+
+msgid "Limit login attempts"
+msgstr "Limitar intentos de acceso"
+
+msgid "Temporarily block an IP after too many failed logins"
+msgstr "Bloquear temporalmente una IP tras demasiados accesos fallidos"
+
+msgid "Max attempts:"
+msgstr "Intentos máximos:"
+
+msgid "within a 15-minute window"
+msgstr "en una ventana de 15 minutos"
+
+msgid "Too many failed login attempts. Please try again in a few minutes."
+msgstr "Demasiados intentos de acceso fallidos. Inténtalo de nuevo en unos minutos."
+
+msgid "Security headers"
+msgstr "Cabeceras de seguridad"
+
+msgid "Select the headers you want. The plugin generates a VCL snippet you apply from your Transparent Edge panel (recommended), or emits them from PHP as a fallback."
+msgstr "Selecciona las cabeceras que quieras. El plugin genera un snippet VCL que aplicas desde tu panel de Transparent Edge (recomendado), o las emite desde PHP como alternativa."
+
+msgid "Restrict geolocation, microphone, camera"
+msgstr "Restringir geolocalización, micrófono, cámara"
+
+msgid "Only enable if HTTPS is fully working. Requires valid certificates on all subdomains."
+msgstr "Actívalo solo si HTTPS funciona por completo. Requiere certificados válidos en todos los subdominios."
+
+msgid "Enable CSP"
+msgstr "Activar CSP"
+
+msgid "Enforce (unchecked = Report-Only, recommended for testing first)"
+msgstr "Aplicar (desmarcado = Report-Only, recomendado para probar primero)"
+
+msgid "PHP fallback"
+msgstr "Alternativa PHP"
+
+msgid "Emit these headers from WordPress (use if you cannot apply the VCL snippet)"
+msgstr "Emitir estas cabeceras desde WordPress (úsalo si no puedes aplicar el snippet VCL)"
+
+msgid "Recommended VCL snippet"
+msgstr "Snippet VCL recomendado"
+
+msgid "Copy and deploy from your Transparent Edge dashboard. The plugin never deploys VCL automatically."
+msgstr "Copia y despliega desde tu dashboard de Transparent Edge. El plugin nunca despliega VCL automáticamente."

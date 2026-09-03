@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.4.0
+ * Version:           1.5.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.4.0' );
+define( 'FLAVOR_EDGE_VERSION', '1.5.0' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -49,6 +49,7 @@ spl_autoload_register( function ( $class ) {
 		FLAVOR_EDGE_DIR . 'includes/modules/' . $relative . '.php',
 		FLAVOR_EDGE_DIR . 'includes/admin/' . $relative . '.php',
 		FLAVOR_EDGE_DIR . 'includes/speculation/' . $relative . '.php',
+		FLAVOR_EDGE_DIR . 'includes/security/' . $relative . '.php',
 	);
 
 	foreach ( $paths as $path ) {
@@ -149,6 +150,12 @@ function flavor_edge_activate_single() {
 
 	// Check write permissions on cache directories.
 	flavor_edge_check_directory_permissions();
+
+	// Apply uploads PHP protection if enabled.
+	$s = get_option( 'flavor_edge_settings', array() );
+	if ( ! empty( $s['harden_block_php_uploads'] ) && class_exists( 'flavor_edge\\TE_Hardening' ) ) {
+		\flavor_edge\TE_Hardening::protect_uploads();
+	}
 
 	// Flush rewrite rules.
 	flush_rewrite_rules();
@@ -254,6 +261,7 @@ function flavor_edge_deactivate_single() {
 	wp_clear_scheduled_hook( 'flavor_edge_preload_batch' );
 	wp_clear_scheduled_hook( 'flavor_edge_warmup_process' );
 	wp_clear_scheduled_hook( \flavor_edge\TE_Api::HEALTH_CRON_HOOK );
+	wp_clear_scheduled_hook( 'flavor_edge_generate_ucss' );
 
 	// Remove .htaccess rules.
 	if ( class_exists( 'flavor_edge\\TE_BrowserCache' ) ) {

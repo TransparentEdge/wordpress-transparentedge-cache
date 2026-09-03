@@ -252,6 +252,11 @@ class TE_Invalidation {
 	 */
 	public static function on_theme_switch() {
 		self::$full_purge_pending = true;
+
+		// Unused CSS depends on the active theme — regenerate.
+		if ( class_exists( __NAMESPACE__ . '\\TE_UnusedCSS' ) ) {
+			TE_UnusedCSS::clear_cache();
+		}
 	}
 
 	/**
@@ -272,6 +277,11 @@ class TE_Invalidation {
 		}
 
 		self::$full_purge_pending = true;
+
+		// Active plugins affect Used CSS — regenerate.
+		if ( class_exists( __NAMESPACE__ . '\\TE_UnusedCSS' ) ) {
+			TE_UnusedCSS::clear_cache();
+		}
 	}
 
 	/**
