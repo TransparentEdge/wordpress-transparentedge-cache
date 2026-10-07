@@ -426,12 +426,26 @@ class TE_Minify {
 			// Skip admin styles.
 			if ( false !== strpos( $dep->src, '/wp-admin/' ) ) { continue; }
 
+			// Capture inline CSS attached via wp_add_inline_style().
+			// It lives in the queue object (extra['after']/['before']), not in the
+			// file, so it must be carried into the bundle or it is lost.
+			$inline_after  = isset( $dep->extra['after'] ) ? (array) $dep->extra['after'] : array();
+			$inline_before = isset( $dep->extra['before'] ) ? (array) $dep->extra['before'] : array();
+
 			$to_combine[ $handle ] = array(
-				'path' => $local_path,
-				'src'  => $dep->src,
-				'ver'  => $dep->ver ?: filemtime( $local_path ),
+				'path'   => $local_path,
+				'src'    => $dep->src,
+				'ver'    => $dep->ver ?: filemtime( $local_path ),
+				'after'  => $inline_after,
+				'before' => $inline_before,
 			);
 			$hash_parts[] = $handle . ':' . ( $dep->ver ?: filemtime( $local_path ) );
+
+			// Inline CSS must be part of the cache key: two pages with the same
+			// stylesheets but different inline CSS must not share a bundle.
+			if ( $inline_after || $inline_before ) {
+				$hash_parts[] = 'inline:' . md5( implode( '|', array_merge( $inline_before, $inline_after ) ) );
+			}
 		}
 
 		if ( count( $to_combine ) < 2 ) {
@@ -457,7 +471,13 @@ class TE_Minify {
 					$content = self::minify_css_content( $content );
 				}
 
-				$combined_content .= "/* {$handle} */\n{$content}\n";
+				// Inline CSS added via wp_add_inline_style() must stay attached to
+				// its handle and in order: 'before' precedes the file, 'after'
+				// follows it, preserving the original cascade.
+				$before = ! empty( $info['before'] ) ? implode( "\n", $info['before'] ) . "\n" : '';
+				$after  = ! empty( $info['after'] ) ? "\n" . implode( "\n", $info['after'] ) : '';
+
+				$combined_content .= "/* {$handle} */\n{$before}{$content}{$after}\n";
 			}
 
 			// Ensure cache dir exists.

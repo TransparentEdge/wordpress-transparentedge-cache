@@ -409,7 +409,10 @@ class TE_UnusedCSS {
 		if ( is_front_page() ) { return 'front-page'; }
 		if ( is_home() )       { return 'blog-home'; }
 		if ( is_singular() ) {
-			return 'singular-' . get_post_type();
+			// sanitize_key() guarantees a safe filename fragment (lowercase,
+			// alphanumeric, _ and - only) — no path traversal via a crafted
+			// post type slug.
+			return 'singular-' . sanitize_key( (string) get_post_type() );
 		}
 		if ( is_category() || is_tag() || is_tax() ) { return 'taxonomy'; }
 		if ( is_archive() )    { return 'archive'; }

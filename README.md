@@ -189,6 +189,7 @@ Soporte para Redis y APCu como backends de Object Cache de WordPress. El plugin 
 
 ## Changelog
 
+- **1.5.1** — Fix: el combinado de CSS perdía los estilos añadidos con wp_add_inline_style(); ahora se incluyen en el bundle en orden de cascada. Hardening: allowlist de extensión en Google Fonts y sanitización del post type en Remove Unused CSS.
 - **1.5.0** — Remove Unused CSS, módulo de seguridad (gating de servicios, recomendador de security headers, hardening local), y seguridad del árbol de dependencias JS (Delay/Defer/Combine respetan `deps` de WordPress).
 - **1.4.0** — Comprobación de permisos de escritura en activación; combine con degradación elegante; fixes de CSS de pestañas.
 - **1.3.1** — Fix de serialización de radios y arrays de checkboxes en el formulario de admin.

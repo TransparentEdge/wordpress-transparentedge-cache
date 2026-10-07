@@ -148,7 +148,12 @@ class TE_GoogleFonts {
 			'/url\((["\']?)(https?:\/\/fonts\.gstatic\.com\/[^"\')\s]+)\1\)/i',
 			function ( $matches ) use ( $cache_dir, $cache_url ) {
 				$font_url = $matches[2];
-				$font_ext = pathinfo( strtok( $font_url, '?' ), PATHINFO_EXTENSION ) ?: 'woff2';
+				$font_ext = strtolower( pathinfo( strtok( $font_url, '?' ), PATHINFO_EXTENSION ) );
+				// Defense in depth: only accept known font extensions for the
+				// cached filename. Anything else falls back to woff2.
+				if ( ! in_array( $font_ext, array( 'woff2', 'woff', 'ttf', 'otf', 'eot', 'svg' ), true ) ) {
+					$font_ext = 'woff2';
+				}
 				$font_hash = md5( $font_url );
 				$font_file = $cache_dir . '/font-' . $font_hash . '.' . $font_ext;
 				$font_local_url = $cache_url . '/font-' . $font_hash . '.' . $font_ext;
