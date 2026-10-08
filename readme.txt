@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.5.1
+Stable tag: 1.5.2
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -49,6 +49,9 @@ Transparent Edge Cache is the official WordPress plugin for the [Transparent Edg
 3. Complete the Setup Wizard or enter credentials manually
 
 == Changelog ==
+
+= 1.5.2 =
+* HARDENING (origin protection): warm-up now holds a concurrency lock so simultaneous republishes can't stampede the origin with parallel warm-up runs. Batch size, pause and request timeout are filterable for delicate origins. Purge is debounced per post (default 5s) to absorb editors hitting "Update" repeatedly. Corrected the warm-up doc comment to match actual (blocking, paced) behaviour.
 
 = 1.5.1 =
 * FIX: CSS combine discarded inline CSS added via wp_add_inline_style() (e.g. theme mega-menu styles, WordPress core global-styles, block styles). It is now carried into the bundle in the correct cascade order.

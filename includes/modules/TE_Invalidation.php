@@ -364,6 +364,22 @@ class TE_Invalidation {
 	 * @param \WP_Post $post    Post object.
 	 */
 	private static function queue_post_tags( $post_id, $post ) {
+		// Debounce: editors often hit "Update" several times in a row. If this
+		// exact post was already queued very recently, skip re-queuing its tags
+		// and warm-up URLs to avoid repeated purge+warm cycles against origin.
+		// The post's own tag is still ensured below so the edit is never lost.
+		$debounce = (int) apply_filters( 'flavor_edge_purge_debounce_seconds', 5 );
+		if ( $debounce > 0 ) {
+			$key = 'flavor_edge_post_debounce_' . $post_id;
+			if ( get_transient( $key ) ) {
+				// Within the debounce window: ensure the post tag is present
+				// (cheap, deduped at flush) but skip the full fan-out.
+				self::$pending_tags[] = 'post-' . $post_id;
+				return;
+			}
+			set_transient( $key, 1, $debounce );
+		}
+
 		// The post itself.
 		self::$pending_tags[] = 'post-' . $post_id;
 
@@ -431,6 +447,14 @@ class TE_Invalidation {
 	const MAX_WARMUP_URLS = 20;
 
 	/**
+	 * Transient key and TTL for the warm-up concurrency lock.
+	 * The TTL is a safety net: if a warm-up process dies mid-run, the lock
+	 * auto-expires so warm-up isn't blocked forever.
+	 */
+	const WARMUP_LOCK     = 'flavor_edge_warmup_lock';
+	const WARMUP_LOCK_TTL = 120; // seconds.
+
+	/**
 	 * Flush the pending invalidation queue.
 	 * Called at shutdown to batch all purge requests.
 	 */
@@ -489,14 +513,18 @@ class TE_Invalidation {
 	/**
 	 * Warm up Varnish cache for purged URLs.
 	 *
-	 * Sends GET requests to the resolved URLs so Varnish fetches a fresh copy
-	 * from origin and caches it. Uses non-blocking requests for speed, with a
-	 * safety limit on the number of URLs.
+	 * Queues the resolved URLs and schedules an asynchronous processor (WP-Cron)
+	 * that sends GET requests so Varnish fetches a fresh copy from origin and
+	 * caches it. The warm-up never runs in the editor's request, so it adds no
+	 * latency to save/publish.
 	 *
-	 * Rate limiting:
-	 * - Max 20 URLs per event (configurable via filter).
-	 * - Non-blocking requests (fire-and-forget via WP cron).
-	 * - 1 second delay between batches of 5 URLs.
+	 * Origin protection (see process_warmup_queue):
+	 * - Max 20 URLs per event (filter: flavor_edge_max_warmup_urls).
+	 * - Sequential, blocking requests in batches (default 5) with a pause
+	 *   between batches (filters: flavor_edge_warmup_batch_size,
+	 *   flavor_edge_warmup_batch_pause_us, flavor_edge_warmup_request_timeout).
+	 * - A concurrency lock prevents overlapping warm-up runs from stampeding
+	 *   the origin when several posts are republished at once.
 	 */
 	private static function do_warmup() {
 		$urls = array_unique( array_filter( self::$warmup_urls, function ( $url ) {
@@ -526,6 +554,17 @@ class TE_Invalidation {
 	 * Process the warm-up queue. Called via cron or directly.
 	 */
 	public static function process_warmup_queue() {
+		// Concurrency lock: never let two warm-up runs hit the origin in
+		// parallel. Under load WP-Cron can spawn overlapping processes; without
+		// this, several runs would read the shared queue and stampede a weak
+		// origin. If a run is already in progress, reschedule and bail.
+		if ( get_transient( self::WARMUP_LOCK ) ) {
+			if ( ! wp_next_scheduled( 'flavor_edge_warmup_process' ) ) {
+				wp_schedule_single_event( time() + 10, 'flavor_edge_warmup_process' );
+			}
+			return;
+		}
+
 		$urls = get_option( 'flavor_edge_warmup_queue', array() );
 
 		if ( empty( $urls ) ) {
@@ -543,30 +582,43 @@ class TE_Invalidation {
 			return;
 		}
 
-		$batch_size = 5;
-		$batches    = array_chunk( $urls, $batch_size );
+		// Acquire the lock for the duration of this run (auto-expires as a
+		// safety net if the process dies mid-way).
+		set_transient( self::WARMUP_LOCK, 1, self::WARMUP_LOCK_TTL );
 
-		foreach ( $batches as $batch ) {
-			foreach ( $batch as $url ) {
-				wp_remote_get( $url, array(
-					'timeout'     => 3,
-					'blocking'    => true,
-					'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
-					'redirection' => 0,
-					'headers'     => array(
-						'Accept' => 'text/html,image/webp,*/*',
-					),
-				) );
-			}
+		// Pacing is filterable so a delicate origin can be warmed more gently
+		// (smaller batches, longer pauses) without touching code.
+		$batch_size = (int) apply_filters( 'flavor_edge_warmup_batch_size', 5 );
+		$batch_size = max( 1, $batch_size );
+		$batch_pause_us = (int) apply_filters( 'flavor_edge_warmup_batch_pause_us', 500000 ); // 0.5s default.
+		$req_timeout    = (int) apply_filters( 'flavor_edge_warmup_request_timeout', 3 );
 
-			// Small delay between batches to avoid stampede.
-			if ( count( $batches ) > 1 ) {
-				usleep( 500000 ); // 0.5 seconds.
+		$batches = array_chunk( $urls, $batch_size );
+
+		try {
+			foreach ( $batches as $batch ) {
+				foreach ( $batch as $url ) {
+					wp_remote_get( $url, array(
+						'timeout'     => $req_timeout,
+						'blocking'    => true,
+						'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
+						'redirection' => 0,
+						'headers'     => array(
+							'Accept' => 'text/html,image/webp,*/*',
+						),
+					) );
+				}
+
+				// Pause between batches to avoid a request stampede on origin.
+				if ( count( $batches ) > 1 && $batch_pause_us > 0 ) {
+					usleep( $batch_pause_us );
+				}
 			}
+		} finally {
+			// Always clear the queue and release the lock, even on error.
+			delete_option( 'flavor_edge_warmup_queue' );
+			delete_transient( self::WARMUP_LOCK );
 		}
-
-		// Clear the queue.
-		delete_option( 'flavor_edge_warmup_queue' );
 	}
 
 	// -------------------------------------------------------------------------
