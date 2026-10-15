@@ -43,6 +43,23 @@ class TE_Settings {
 			'headers_enabled'       => true,
 			'html_s_maxage'         => 172800,  // 48h in Varnish.
 			'html_max_age'          => 3600,    // 1h in browser.
+			'html_swr'              => 60,      // stale-while-revalidate (was hardcoded).
+			'html_sie'              => 86400,   // stale-if-error airbag (was hardcoded).
+			// Front-page cache profile (v1.6.0). Lets the plugin own the homepage
+			// TTL instead of depending on a hand-written VCL branch. Off by default
+			// → the homepage keeps using the global HTML profile above, so existing
+			// installs see no behaviour change until it's switched on.
+			'front_page_cache_override' => false,
+			'front_page_max_age'        => 30,     // browser: breaking-news fresh.
+			'front_page_s_maxage'       => 300,    // edge fresh window (news home).
+			'front_page_swr'            => 300,    // serve stale instantly, revalidate behind.
+			'front_page_sie'            => 86400,  // airbag: serve day-old home on origin 5xx.
+			// Origin page cache (v1.6.0). Disk-Enhanced style: serves rendered
+			// anonymous HTML before WordPress boots, so a CDN miss does NOT
+			// regenerate WordPress (the W3TC capability this client relied on).
+			'page_cache_enabled'    => false,
+			'page_cache_backend'    => 'disk',   // 'disk' | 'redis' | 'memcached'.
+			'page_cache_ttl'        => 300,      // seconds; fallback store for edge misses.
 			'static_s_maxage'       => 2592000,  // 30 days in Varnish.
 			'static_max_age'        => 86400,    // 1 day in browser.
 			'surrogate_keys'        => true,
@@ -112,7 +129,7 @@ class TE_Settings {
 			'speculation_enabled'    => false,           // Default off for upgrades; on for new installs via wizard.
 			'speculation_mode'       => 'balanced',      // 'conservative', 'balanced', 'aggressive'.
 			'speculation_post_types' => array( 'post', 'page' ),
-			'speculation_injection'  => 'php',           // 'php' (origin) or 'vcl' (edge).
+			'speculation_injection'  => 'inline',        // 'inline' (<head>, no endpoint), 'php' (header→REST), 'vcl' (edge).
 
 			// Remove Unused CSS (v1.5.0).
 			'remove_unused_css'      => false,

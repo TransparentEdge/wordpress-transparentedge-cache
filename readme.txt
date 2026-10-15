@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.5.2
+Stable tag: 1.6.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -49,6 +49,16 @@ Transparent Edge Cache is the official WordPress plugin for the [Transparent Edg
 3. Complete the Setup Wizard or enter credentials manually
 
 == Changelog ==
+
+= 1.6.0 =
+* NEW (Origin Shield): Origin page cache — serves anonymous HTML before WordPress boots (disk / Redis / Memcached backends), so a CDN miss no longer regenerates WordPress. Partitioned by device, skips logged-in users, and is invalidated by the same purge events as the edge (one purge clears edge + origin). Opt-in; backend is selectable with its trade-offs shown on screen. Host allowlist and per-entry size cap protect a weak origin.
+* NEW (Origin Shield): Dedicated homepage cache profile — the most-requested URL gets its own short-fresh + generous stale-while-revalidate policy, owned by the plugin instead of a hand-written VCL branch. Extensible per template via the flavor_edge_cache_profile filter.
+* NEW (Origin Shield): Cookie guard — propose-only VCL that strips non-essential cookies before the cache lookup (so a stray analytics/consent cookie no longer forces a pass), plus an on-demand Set-Cookie / Vary: Cookie origin probe.
+* NEW: Vary neutralisation at the origin — the anonymous document Vary never carries Cookie or User-Agent (which fragments the edge cache into one object per analytics cookie), re-asserted right before headers are sent so a theme/plugin cannot re-add it.
+* NEW: Speculation Rules inline injection (now the default) — rules are written into the page <head> that the edge already caches, removing the per-navigation request to the /wp-json/ endpoint that could reach the origin.
+* NEW: Serve-stale (grace/keep) VCL recommender — derives Varnish grace/keep from the Cache-Control the plugin sends, so stale-while-revalidate / stale-if-error are actually honoured at the edge.
+* NEW: Object cache Memcached backend drop-in (previously detected and recommended but never generated — a server with Memcached and no Redis could write a broken drop-in). Installing an unsupported backend is now refused instead of writing one.
+* FIX: Global stale-while-revalidate / stale-if-error are now configurable (previously hardcoded). The page cache never stores a response carrying Set-Cookie, and the wp-config.php backup is written to a non web-served location.
 
 = 1.5.2 =
 * HARDENING (origin protection): warm-up now holds a concurrency lock so simultaneous republishes can't stampede the origin with parallel warm-up runs. Batch size, pause and request timeout are filterable for delicate origins. Purge is debounced per post (default 5s) to absorb editors hitting "Update" repeatedly. Corrected the warm-up doc comment to match actual (blocking, paced) behaviour.

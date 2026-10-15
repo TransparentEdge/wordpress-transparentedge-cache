@@ -85,6 +85,12 @@ class TE_Core {
 		// Object Cache management (admin only).
 		TE_ObjectCache::init();
 
+		// Origin page cache (serves anonymous HTML before WordPress boots).
+		TE_PageCache::init();
+
+		// Cookie guard (propose-only strip VCL + Set-Cookie/Vary diagnostic).
+		TE_Cookie_Guard::init();
+
 		// Browser Cache (.htaccess rules for static files).
 		TE_BrowserCache::init();
 

@@ -11,7 +11,7 @@ $settings   = \flavor_edge\TE_Settings::get_all();
 $conflicts  = \flavor_edge\TE_Conflict_Detector::detect();
 $is_enabled = ! empty( $settings['speculation_enabled'] );
 $mode       = $settings['speculation_mode'] ?? 'balanced';
-$injection  = $settings['speculation_injection'] ?? 'php';
+$injection  = $settings['speculation_injection'] ?? 'inline';
 
 // Post types.
 $all_types     = get_post_types( array( 'public' => true ), 'objects' );
@@ -102,12 +102,17 @@ $preview_url = rest_url( 'te-cache/v1/speculation-rules' );
 		<td>
 			<fieldset>
 				<label style="display:block; margin-bottom: 6px;">
+					<input type="radio" name="speculation_injection" value="inline" <?php checked( $injection, 'inline' ); ?> />
+					<strong><?php esc_html_e( 'Inline (recommended)', 'flavor-edge-cache' ); ?></strong>
+					— <?php esc_html_e( 'Rules are written into the page &lt;head&gt;, inside the HTML the edge already caches. No separate request, so nothing hits the origin to hand out the rules.', 'flavor-edge-cache' ); ?>
+				</label>
+				<label style="display:block; margin-bottom: 6px;">
 					<input type="radio" name="speculation_injection" value="php" <?php checked( $injection, 'php' ); ?> />
-					<?php esc_html_e( 'PHP (origin) — Header added by WordPress', 'flavor-edge-cache' ); ?>
+					<?php esc_html_e( 'PHP header &rarr; endpoint — a Speculation-Rules header points the browser to /wp-json/. The browser fetches it on every navigation, so it MUST be cached at the edge or it hits the origin on each miss. Use only for very large rule sets.', 'flavor-edge-cache' ); ?>
 				</label>
 				<label style="display:block; margin-bottom: 6px;">
 					<input type="radio" name="speculation_injection" value="vcl" <?php checked( $injection, 'vcl' ); ?> />
-					<?php esc_html_e( 'VCL (edge) — Header added by Varnish. Recommended if VCL Snippets are enabled.', 'flavor-edge-cache' ); ?>
+					<?php esc_html_e( 'VCL (edge) — header added by Varnish. Same endpoint caveat as PHP above.', 'flavor-edge-cache' ); ?>
 				</label>
 			</fieldset>
 			<?php if ( 'vcl' === $injection ) : ?>

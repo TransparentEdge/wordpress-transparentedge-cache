@@ -406,6 +406,94 @@
     });
 
     // -------------------------------------------------------------------------
+    // Page Cache (origin) — enable / disable / flush.
+    // -------------------------------------------------------------------------
+    $(document).on('click', '.te-enable-page-cache', function () {
+        var $btn = $(this);
+        if (!confirm('Enable the origin page cache? This writes wp-content/advanced-cache.php and sets WP_CACHE in wp-config.php.')) return;
+        $btn.prop('disabled', true).text('Enabling...');
+        $.post(FE.ajaxUrl, {
+            action: 'flavor_edge_enable_page_cache',
+            nonce:  FE.nonce
+        }, function (res) {
+            $btn.prop('disabled', false);
+            if (res && res.success) {
+                location.reload();
+            } else {
+                alert(res && res.message ? res.message : 'Error enabling page cache');
+                $btn.text('Enable');
+            }
+        });
+    });
+
+    $(document).on('click', '.te-disable-page-cache', function () {
+        if (!confirm('Disable the origin page cache? This removes advanced-cache.php and unsets our WP_CACHE define.')) return;
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Disabling...');
+        $.post(FE.ajaxUrl, {
+            action: 'flavor_edge_disable_page_cache',
+            nonce:  FE.nonce
+        }, function (res) {
+            if (res && res.success) {
+                location.reload();
+            } else {
+                $btn.prop('disabled', false).text('Disable');
+                alert(res && res.message ? res.message : 'Error');
+            }
+        });
+    });
+
+    $(document).on('click', '.te-flush-page-cache', function () {
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Flushing...');
+        $.post(FE.ajaxUrl, {
+            action: 'flavor_edge_flush_page_cache',
+            nonce:  FE.nonce
+        }, function (res) {
+            $btn.prop('disabled', false).text('Flush');
+            if (res && res.success) {
+                $btn.text('✓ Flushed');
+                setTimeout(function () { $btn.text('Flush'); }, 2000);
+            }
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // Cookie guard — on-demand Set-Cookie / Vary probe.
+    // -------------------------------------------------------------------------
+    $(document).on('click', '#te-probe-cookies', function () {
+        var $btn = $(this);
+        var $out = $('#te-cookie-probe-result');
+        $btn.prop('disabled', true).text('Checking...');
+        $out.html('');
+        $.post(FE.ajaxUrl, {
+            action: 'flavor_edge_probe_cookies',
+            nonce:  FE.nonce
+        }, function (res) {
+            $btn.prop('disabled', false).text('Check cookies now');
+            if (!res || !res.success || !res.data) {
+                $out.html('<span style="color:#b32d2e;">Probe failed</span>');
+                return;
+            }
+            var d = res.data;
+            if (d.ok === false) {
+                $out.html('<span style="color:#b32d2e;">Error: ' + (d.error || '') + '</span>');
+                return;
+            }
+            if (d.clean) {
+                $out.html('<span style="color:#155724;">✓ No cookie issues (HTTP ' + d.status + ', no Set-Cookie, Vary clean)</span>');
+                return;
+            }
+            var html = '<ul style="margin:6px 0 0;color:#8a6d3b;list-style:disc inside;">';
+            (d.warnings || []).forEach(function (w) {
+                html += '<li>⚠ ' + $('<div>').text(w).html() + '</li>';
+            });
+            html += '</ul>';
+            $out.html(html);
+        });
+    });
+
+    // -------------------------------------------------------------------------
     // Clear Minify Cache.
     // -------------------------------------------------------------------------
     $(document).on('click', '.te-clear-minify-cache', function () {

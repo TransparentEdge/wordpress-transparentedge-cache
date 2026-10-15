@@ -177,7 +177,24 @@ defined( 'ABSPATH' ) || exit;
 						<button type="button" class="button button-small te-disable-object-cache" style="margin-top:8px;"><?php esc_html_e( 'Disable', 'flavor-edge-cache' ); ?></button>
 					<?php endif; ?>
 				</div>
-				<div class="te-dash-card">
+								<div class="te-dash-card">
+					<h4><?php esc_html_e( 'Page Cache (origin)', 'flavor-edge-cache' ); ?></h4>
+					<?php $pc_on = \flavor_edge\TE_PageCache::is_enabled(); ?>
+					<span class="te-dash-value" style="color:<?php echo $pc_on ? '#155724' : '#888'; ?>;">
+						<?php echo $pc_on ? esc_html__( 'Enabled', 'flavor-edge-cache' ) : esc_html__( 'Disabled', 'flavor-edge-cache' ); ?>
+					</span>
+					<span class="te-dash-detail">
+						<?php echo esc_html( ucfirst( $settings['page_cache_backend'] ) ); ?> <?php esc_html_e( 'backend', 'flavor-edge-cache' ); ?>
+						— <?php echo esc_html( (int) $settings['page_cache_ttl'] ); ?>s TTL
+					</span>
+					<?php if ( ! $pc_on ) : ?>
+						<button type="button" class="button button-small te-enable-page-cache" style="margin-top:8px;"><?php esc_html_e( 'Enable', 'flavor-edge-cache' ); ?></button>
+					<?php else : ?>
+						<button type="button" class="button button-small te-flush-page-cache" style="margin-top:8px;"><?php esc_html_e( 'Flush', 'flavor-edge-cache' ); ?></button>
+						<button type="button" class="button button-small te-disable-page-cache" style="margin-top:8px;"><?php esc_html_e( 'Disable', 'flavor-edge-cache' ); ?></button>
+					<?php endif; ?>
+				</div>
+<div class="te-dash-card">
 					<h4><?php esc_html_e( 'Minify Cache', 'flavor-edge-cache' ); ?></h4>
 					<?php $minify_stats = \flavor_edge\TE_Minify::get_cache_stats(); ?>
 					<span class="te-dash-value"><?php echo esc_html( $minify_stats['files'] ); ?> <?php esc_html_e( 'files', 'flavor-edge-cache' ); ?></span>
@@ -302,6 +319,103 @@ defined( 'ABSPATH' ) || exit;
 						<span class="description"><?php esc_html_e( 'seconds. Default: 3600 (1h). Reduces unnecessary checks to CDN nodes.', 'flavor-edge-cache' ); ?></span>
 					</td>
 				</tr>
+
+					<tr>
+						<th colspan="2"><h3 style="margin:1em 0 0"><?php esc_html_e( 'Homepage (front page)', 'flavor-edge-cache' ); ?></h3></th>
+					</tr>
+					<tr>
+						<th colspan="2">
+							<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'The homepage is the most-requested URL and the one that must never fall back to the origin. Give it its own policy — a short fresh window plus a generous stale-while-revalidate — so an expiry is served stale instantly while a single request revalidates behind it, instead of a miss storm. When off, the homepage uses the global HTML profile above.', 'flavor-edge-cache' ); ?></p>
+						</th>
+					</tr>
+					<tr>
+						<th><label for="front_page_cache_override"><?php esc_html_e( 'Dedicated homepage profile', 'flavor-edge-cache' ); ?></label></th>
+						<td>
+							<label>
+								<input type="checkbox" id="front_page_cache_override" name="front_page_cache_override" value="1" <?php checked( ! empty( $settings['front_page_cache_override'] ) ); ?> />
+								<?php esc_html_e( 'Use these values for the homepage instead of the global HTML TTLs', 'flavor-edge-cache' ); ?>
+							</label>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="front_page_s_maxage"><?php esc_html_e( 'CDN TTL (s-maxage)', 'flavor-edge-cache' ); ?></label></th>
+						<td>
+							<input type="number" id="front_page_s_maxage" name="front_page_s_maxage" value="<?php echo esc_attr( $settings['front_page_s_maxage'] ); ?>" min="0" class="small-text" />
+							<span class="description"><?php esc_html_e( 'seconds. Default: 300 (5 min). Short fresh window for a news homepage.', 'flavor-edge-cache' ); ?></span>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="front_page_max_age"><?php esc_html_e( 'Browser TTL (max-age)', 'flavor-edge-cache' ); ?></label></th>
+						<td>
+							<input type="number" id="front_page_max_age" name="front_page_max_age" value="<?php echo esc_attr( $settings['front_page_max_age'] ); ?>" min="0" class="small-text" />
+							<span class="description"><?php esc_html_e( 'seconds. Default: 30. Low so breaking news is picked up quickly.', 'flavor-edge-cache' ); ?></span>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="front_page_swr"><?php esc_html_e( 'Stale-while-revalidate', 'flavor-edge-cache' ); ?></label></th>
+						<td>
+							<input type="number" id="front_page_swr" name="front_page_swr" value="<?php echo esc_attr( $settings['front_page_swr'] ); ?>" min="0" class="small-text" />
+							<span class="description"><?php esc_html_e( 'seconds. Default: 300. After expiry the edge serves the stale homepage instantly and a single request revalidates behind it — this is what shields a weak origin.', 'flavor-edge-cache' ); ?></span>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="front_page_sie"><?php esc_html_e( 'Stale-if-error', 'flavor-edge-cache' ); ?></label></th>
+						<td>
+							<input type="number" id="front_page_sie" name="front_page_sie" value="<?php echo esc_attr( $settings['front_page_sie'] ); ?>" min="0" class="small-text" />
+							<span class="description"><?php esc_html_e( 'seconds. Default: 86400 (24h). Airbag: if the origin returns 5xx, serve the last good homepage instead of an error.', 'flavor-edge-cache' ); ?></span>
+						</td>
+					</tr>
+					<tr>
+						<th colspan="2">
+							<div class="te-vcl-preview" style="margin-top:4px;">
+								<details>
+									<summary style="cursor:pointer;font-weight:600;font-size:12px;color:#0073aa;"><?php esc_html_e( 'Serve-stale VCL (grace / keep) — propose-only, makes stale-while-revalidate actually work', 'flavor-edge-cache' ); ?></summary>
+									<p class="description" style="margin:8px 0;"><?php esc_html_e( 'The homepage profile sends stale-while-revalidate and stale-if-error, but Varnish only serves stale during revalidation when grace/keep match. This snippet derives them from the Cache-Control the plugin sends, so they stay in sync. The plugin never deploys VCL — copy it into Configuration → VCL.', 'flavor-edge-cache' ); ?></p>
+									<textarea readonly class="large-text code" rows="14" style="font-family:monospace;font-size:12px;background:#f0f0f1;"><?php echo esc_textarea( \flavor_edge\TE_Headers::generate_grace_vcl() ); ?></textarea>
+									<p><button type="button" class="button te-copy-grace-vcl" onclick="var b=this;navigator.clipboard.writeText(b.closest('details').querySelector('textarea').value).then(function(){b.textContent='✓ Copied!';setTimeout(function(){b.textContent='📋 Copy VCL';},2000);});">📋 <?php esc_html_e( 'Copy VCL', 'flavor-edge-cache' ); ?></button></p>
+								</details>
+							</div>
+						</th>
+					</tr>
+
+					<tr>
+						<th colspan="2"><h3 style="margin:1em 0 0"><?php esc_html_e( 'Origin page cache (serves HTML before WordPress boots)', 'flavor-edge-cache' ); ?></h3></th>
+					</tr>
+					<tr>
+						<th colspan="2">
+							<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'On a CDN miss the edge still has to fetch from the origin. This serves a pre-rendered copy of anonymous pages before WordPress boots, so that fetch does not regenerate WordPress — the W3TC "Disk-Enhanced" capability. Enable/disable it from the Page Cache card at the top. Logged-in users, and any URL or cookie in your exclusions, are never page-cached.', 'flavor-edge-cache' ); ?></p>
+						</th>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Storage backend', 'flavor-edge-cache' ); ?></th>
+						<td>
+							<fieldset>
+								<label style="display:block;margin-bottom:6px;">
+									<input type="radio" name="page_cache_backend" value="disk" <?php checked( $settings['page_cache_backend'], 'disk' ); ?> />
+									<strong><?php esc_html_e( 'Disk (default)', 'flavor-edge-cache' ); ?></strong>
+									— <?php esc_html_e( 'Zero dependencies, works anywhere — true W3TC Disk-Enhanced parity. Each lookup is a filesystem read, so on slow or network disk (NFS) and under very high concurrency the I/O and stat cost shows, and lookups index slower than an in-memory store.', 'flavor-edge-cache' ); ?>
+								</label>
+								<label style="display:block;margin-bottom:6px;">
+									<input type="radio" name="page_cache_backend" value="redis" <?php checked( $settings['page_cache_backend'], 'redis' ); ?> />
+									<strong><?php esc_html_e( 'Redis', 'flavor-edge-cache' ); ?></strong>
+									— <?php esc_html_e( 'In-memory key lookup, no disk I/O: faster under concurrency and better at indexing than disk. Reuses your WP_REDIS_* settings. Requires the Redis service and the phpredis extension.', 'flavor-edge-cache' ); ?>
+								</label>
+								<label style="display:block;margin-bottom:6px;">
+									<input type="radio" name="page_cache_backend" value="memcached" <?php checked( $settings['page_cache_backend'], 'memcached' ); ?> />
+									<strong><?php esc_html_e( 'Memcached', 'flavor-edge-cache' ); ?></strong>
+									— <?php esc_html_e( 'Same in-memory advantage as Redis; its flush is generation-based so it never wipes a store shared with the object cache. Requires the Memcached service and extension.', 'flavor-edge-cache' ); ?>
+								</label>
+							</fieldset>
+							<p class="description" style="margin-top:4px;"><?php esc_html_e( 'Change the backend, then toggle the Page Cache off and on from the card above to apply it.', 'flavor-edge-cache' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="page_cache_ttl"><?php esc_html_e( 'Page cache TTL', 'flavor-edge-cache' ); ?></label></th>
+						<td>
+							<input type="number" id="page_cache_ttl" name="page_cache_ttl" value="<?php echo esc_attr( $settings['page_cache_ttl'] ); ?>" min="0" class="small-text" />
+							<span class="description"><?php esc_html_e( 'seconds. Default: 300. It is only a fallback for edge misses, so a short value is fine; a purge clears it anyway.', 'flavor-edge-cache' ); ?></span>
+						</td>
+					</tr>
 
 				<tr>
 					<th colspan="2"><h3 style="margin:0"><?php esc_html_e( 'Static Resources (CSS, JS, images, fonts, video)', 'flavor-edge-cache' ); ?></h3></th>
@@ -706,6 +820,24 @@ defined( 'ABSPATH' ) || exit;
 						<p class="description"><?php esc_html_e( 'One pattern per line. If a visitor has any of these cookies, the page won\'t be cached.', 'flavor-edge-cache' ); ?></p>
 					</td>
 				</tr>
+					<tr>
+						<th><?php esc_html_e( 'Cookie normalisation', 'flavor-edge-cache' ); ?></th>
+						<td>
+							<p class="description" style="margin-top:0;"><?php esc_html_e( 'A stray analytics or consent cookie can push the edge to pass every anonymous request to the origin. These tools keep that from happening.', 'flavor-edge-cache' ); ?></p>
+							<p>
+								<button type="button" id="te-probe-cookies" class="button button-secondary"><?php esc_html_e( 'Check cookies now', 'flavor-edge-cache' ); ?></button>
+								<span id="te-cookie-probe-result" style="margin-left:8px;"></span>
+							</p>
+							<div class="te-vcl-preview" style="margin-top:12px;">
+								<details>
+									<summary style="cursor:pointer;font-weight:600;font-size:12px;color:#0073aa;"><?php esc_html_e( 'Cookie-strip VCL snippet (propose-only — review before deploying)', 'flavor-edge-cache' ); ?></summary>
+									<p class="description" style="margin:8px 0;"><?php esc_html_e( 'Keeps only the Excluded Cookies above and strips the rest before the cache lookup, so a stray cookie no longer causes a miss. The plugin never deploys VCL — copy it into Configuration → VCL on the Transparent Edge dashboard.', 'flavor-edge-cache' ); ?></p>
+									<textarea readonly class="large-text code" rows="16" style="font-family:monospace;font-size:12px;background:#f0f0f1;"><?php echo esc_textarea( \flavor_edge\TE_Cookie_Guard::generate_vcl_snippet() ); ?></textarea>
+									<p><button type="button" class="button te-copy-cookie-vcl" onclick="var b=this;navigator.clipboard.writeText(b.closest('details').querySelector('textarea').value).then(function(){b.textContent='✓ Copied!';setTimeout(function(){b.textContent='📋 Copy VCL';},2000);});">📋 <?php esc_html_e( 'Copy VCL', 'flavor-edge-cache' ); ?></button></p>
+								</details>
+							</div>
+						</td>
+					</tr>
 				<tr>
 					<th><label for="accepted_query_strings"><?php esc_html_e( 'Ignored Query Strings', 'flavor-edge-cache' ); ?></label></th>
 					<td>

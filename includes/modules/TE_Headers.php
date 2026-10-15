@@ -172,14 +172,16 @@ class TE_Headers {
 
 		$settings = TE_Settings::get_all();
 
-		// Cache-Control with dual TTL.
-		$max_age   = (int) $settings['html_max_age'];
-		$s_maxage  = (int) $settings['html_s_maxage'];
+		// Cache-Control: resolve the per-template TTL profile (the homepage can
+		// override the global HTML profile — see resolve_cache_profile).
+		$profile = self::resolve_cache_profile( $settings );
 
 		header( sprintf(
-			'Cache-Control: public, max-age=%d, s-maxage=%d, stale-while-revalidate=60, stale-if-error=86400',
-			$max_age,
-			$s_maxage
+			'Cache-Control: public, max-age=%d, s-maxage=%d, stale-while-revalidate=%d, stale-if-error=%d',
+			$profile['max_age'],
+			$profile['s_maxage'],
+			$profile['swr'],
+			$profile['sie']
 		) );
 
 		// Surrogate-Keys.
@@ -187,24 +189,159 @@ class TE_Headers {
 			header( 'Surrogate-Keys: ' . implode( ' ', self::$surrogate_keys ) );
 		}
 
-		// Vary.
-		$vary_parts = array();
-		if ( $settings['vary_device'] ) {
-			$vary_parts[] = 'X-Device';
+		// Vary. Emit the safe set now AND re-assert it right before PHP sends
+		// headers (finalize_vary), so a theme/plugin that appends
+		// "Vary: Cookie, User-Agent" later cannot fragment the anonymous
+		// document cache into one object per analytics cookie.
+		$vary = self::get_safe_vary( $settings );
+		if ( ! empty( $vary ) ) {
+			header( 'Vary: ' . implode( ', ', $vary ) );
 		}
-		if ( $settings['vary_language'] ) {
-			$vary_parts[] = 'Accept-Language';
-		}
-		$vary_parts = apply_filters( 'flavor_edge_vary_headers', $vary_parts );
-		if ( ! empty( $vary_parts ) ) {
-			header( 'Vary: ' . implode( ', ', $vary_parts ) );
+		if ( function_exists( 'header_register_callback' ) ) {
+			header_register_callback( array( __CLASS__, 'finalize_vary' ) );
 		}
 
 		// Debug headers (admin only — never expose to public visitors).
 		if ( $settings['debug_mode'] && is_user_logged_in() && current_user_can( 'manage_options' ) ) {
 			header( 'X-Flavor-Edge-Keys: ' . implode( ' ', self::$surrogate_keys ) );
-			header( 'X-Flavor-Edge-TTL: max-age=' . $max_age . ', s-maxage=' . $s_maxage );
+			header( 'X-Flavor-Edge-TTL: max-age=' . $profile['max_age'] . ', s-maxage=' . $profile['s_maxage'] );
 		}
+	}
+
+	/**
+	 * Resolve the Cache-Control TTL profile for the current request.
+	 *
+	 * Defaults to the global HTML profile. The front page can override it so the
+	 * plugin — not a hand-written VCL branch — owns the homepage policy: a short
+	 * fresh TTL plus a generous stale-while-revalidate window, so an expiry is
+	 * served stale instantly while a single request revalidates behind it,
+	 * instead of a miss storm against the origin. Extensible per template
+	 * (sections, articles, …) via the 'flavor_edge_cache_profile' filter.
+	 *
+	 * @param array $settings Full settings array.
+	 * @return array { max_age, s_maxage, swr, sie }
+	 */
+	private static function resolve_cache_profile( $settings ) {
+		$profile = array(
+			'max_age'  => (int) $settings['html_max_age'],
+			's_maxage' => (int) $settings['html_s_maxage'],
+			'swr'      => (int) $settings['html_swr'],
+			'sie'      => (int) $settings['html_sie'],
+		);
+
+		if ( ! empty( $settings['front_page_cache_override'] ) && ( is_front_page() || is_home() ) ) {
+			$profile = array(
+				'max_age'  => (int) $settings['front_page_max_age'],
+				's_maxage' => (int) $settings['front_page_s_maxage'],
+				'swr'      => (int) $settings['front_page_swr'],
+				'sie'      => (int) $settings['front_page_sie'],
+			);
+		}
+
+		/**
+		 * Filter the resolved Cache-Control profile before it is emitted.
+		 *
+		 * @param array $profile  { max_age, s_maxage, swr, sie }.
+		 * @param array $settings Full settings array.
+		 */
+		return apply_filters( 'flavor_edge_cache_profile', $profile, $settings );
+	}
+
+	/**
+	 * Build the safe Vary token set for an anonymous cacheable HTML document.
+	 *
+	 * Deliberately never includes Cookie or User-Agent: varying the anonymous
+	 * document on those fragments the edge cache into one object per analytics
+	 * cookie (a measured ~58% miss on real news sites) or per UA string. Device
+	 * segmentation is carried by X-Device, language by Accept-Language.
+	 *
+	 * @param array $settings Full settings array.
+	 * @return array
+	 */
+	private static function get_safe_vary( $settings ) {
+		$vary = array( 'Accept-Encoding' );
+		if ( ! empty( $settings['vary_device'] ) ) {
+			$vary[] = 'X-Device';
+		}
+		if ( ! empty( $settings['vary_language'] ) ) {
+			$vary[] = 'Accept-Language';
+		}
+
+		/**
+		 * Filter the Vary tokens for anonymous cacheable responses.
+		 *
+		 * Cookie / User-Agent are intentionally excluded; add tokens here only
+		 * if you fully control their cardinality.
+		 *
+		 * @param array $vary Vary tokens.
+		 */
+		$vary = apply_filters( 'flavor_edge_vary_headers', $vary );
+
+		return array_values( array_unique( array_filter( array_map( 'trim', (array) $vary ) ) ) );
+	}
+
+	/**
+	 * Force the safe Vary header right before PHP sends headers.
+	 *
+	 * Registered via header_register_callback() so it runs AFTER WordPress core,
+	 * the theme and other plugins have touched the Vary header. This neutralises
+	 * a stray "Vary: Cookie, User-Agent" at the origin instead of relying on a
+	 * VCL override at the edge. Only cacheable responses are touched; logged-in,
+	 * REST and dynamic responses are left exactly as they are.
+	 */
+	public static function finalize_vary() {
+		if ( self::is_uncacheable_request() ) {
+			return;
+		}
+
+		$vary = self::get_safe_vary( TE_Settings::get_all() );
+		if ( ! empty( $vary ) ) {
+			// replace = true → collapses any Cookie/User-Agent variant set.
+			header( 'Vary: ' . implode( ', ', $vary ), true );
+		}
+	}
+
+	/**
+	 * Propose-only VCL that makes Varnish honour the stale-while-revalidate /
+	 * stale-if-error the plugin already emits in Cache-Control.
+	 *
+	 * Without it, those directives are advisory only: the plugin's homepage
+	 * profile sends them, but the edge won't serve stale during revalidation
+	 * unless beresp.grace / beresp.keep are set accordingly. This derives both
+	 * from the response's own Cache-Control, so it stays in sync with whatever
+	 * TTL profile the plugin resolves. The plugin never deploys VCL — the user
+	 * copies this into the Transparent Edge dashboard.
+	 *
+	 * @return string VCL.
+	 */
+	public static function generate_grace_vcl() {
+		return <<<'VCL'
+# ── Serve-stale alignment (grace / keep) ────────────────────────
+# Generated by Transparent Edge Cache plugin — PROPOSE ONLY, review first.
+# Requires the std vmod ("import std;", present in most base VCLs).
+#
+# Makes Varnish honour the stale-while-revalidate / stale-if-error that the
+# plugin sends in Cache-Control:
+#   - grace: after the TTL expires, serve the stale object INSTANTLY while ONE
+#     request revalidates in the background — this is what shields the origin
+#     from a miss storm on the most-requested URLs (e.g. the homepage).
+#   - keep:  retain the object past grace so stale-if-error can still serve it
+#     when the origin returns 5xx.
+#
+# Deploy this in: Configuration → VCL → vcl_backend_response
+# ────────────────────────────────────────────────────────────────
+
+sub vcl_backend_response {
+    if (beresp.http.Cache-Control ~ "stale-while-revalidate=[0-9]+") {
+        set beresp.grace = std.duration(
+            regsub(beresp.http.Cache-Control, "(?i).*stale-while-revalidate=([0-9]+).*", "\1") + "s", 10s);
+    }
+    if (beresp.http.Cache-Control ~ "stale-if-error=[0-9]+") {
+        set beresp.keep = std.duration(
+            regsub(beresp.http.Cache-Control, "(?i).*stale-if-error=([0-9]+).*", "\1") + "s", 0s);
+    }
+}
+VCL;
 	}
 
 	/**
@@ -269,7 +406,8 @@ class TE_Headers {
 		}
 
 		// POST requests.
-		if ( 'GET' !== $_SERVER['REQUEST_METHOD'] && 'HEAD' !== $_SERVER['REQUEST_METHOD'] ) {
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : 'GET';
+		if ( 'GET' !== $method && 'HEAD' !== $method ) {
 			return true;
 		}
 

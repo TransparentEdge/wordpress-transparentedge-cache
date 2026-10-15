@@ -297,7 +297,10 @@ class TE_Admin {
 		}
 
 		$numbers = array(
-			'html_s_maxage', 'html_max_age', 'static_s_maxage', 'static_max_age',
+			'html_s_maxage', 'html_max_age', 'html_swr', 'html_sie',
+			'front_page_max_age', 'front_page_s_maxage', 'front_page_swr', 'front_page_sie',
+			'page_cache_ttl',
+			'static_s_maxage', 'static_max_age',
 			'i3_quality_jpeg', 'i3_quality_webp', 'i3_s_maxage', 'i3_max_age',
 			'debounce_seconds', 'heartbeat_interval',
 			'harden_login_max_attempts', 'sec_header_hsts_maxage',
@@ -308,6 +311,9 @@ class TE_Admin {
 				$settings[ $key ] = absint( $raw[ $key ] );
 			}
 		}
+
+		// Front-page cache override (checkbox).
+		$settings['front_page_cache_override'] = ! empty( $raw['front_page_cache_override'] );
 
 		$text_fields = array(
 			'invalidation_method', 'i3_max_length', 'delay_js_exclusions', 'defer_js_exclusions', 'combine_js_exclusions',
@@ -339,9 +345,16 @@ class TE_Admin {
 		}
 
 		// Validate speculation_injection.
-		$valid_injection = array( 'php', 'vcl' );
+		$valid_injection = array( 'inline', 'php', 'vcl' );
 		if ( ! in_array( $settings['speculation_injection'] ?? '', $valid_injection, true ) ) {
-			$settings['speculation_injection'] = 'php';
+			$settings['speculation_injection'] = 'inline';
+		}
+
+		// Validate page_cache_backend (page_cache_enabled is toggled via AJAX, not here).
+		if ( isset( $raw['page_cache_backend'] ) ) {
+			$valid_backend = array( 'disk', 'redis', 'memcached' );
+			$settings['page_cache_backend'] = in_array( $raw['page_cache_backend'], $valid_backend, true )
+				? $raw['page_cache_backend'] : 'disk';
 		}
 
 		// Connection credentials (also saved via Test Connection, but handle save too).

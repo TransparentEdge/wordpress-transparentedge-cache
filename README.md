@@ -99,7 +99,7 @@ Imágenes e iframes con `loading="lazy"`. Las imágenes de fondo CSS (inline `ba
 
 ## Speculation Rules
 
-Genera reglas de Speculation Rules (prefetch/prerender) servidas en un endpoint REST cacheable en el edge (`/wp-json/te-cache/v1/speculation-rules`). Tres modos: Conservative (click), Balanced (hover), Aggressive (hover + prerender). Incluye exclusiones automáticas para WP core, WooCommerce, plugins de membresía, parámetros de HubSpot y multilingüe, además de detección de conflictos con otros plugins de prefetch. Inyección por PHP (origen) o VCL (edge). El modo Aggressive requiere confirmación explícita.
+Genera reglas de Speculation Rules (prefetch/prerender) servidas en un endpoint REST cacheable en el edge (`/wp-json/te-cache/v1/speculation-rules`). Tres modos: Conservative (click), Balanced (hover), Aggressive (hover + prerender). Incluye exclusiones automáticas para WP core, WooCommerce, plugins de membresía, parámetros de HubSpot y multilingüe, además de detección de conflictos con otros plugins de prefetch. Inyección **inline** en el `<head>` (por defecto; las reglas viajan dentro del HTML ya cacheado, sin petición extra al endpoint), o por cabecera PHP / VCL. El modo Aggressive requiere confirmación explícita.
 
 ## Seguridad
 
@@ -136,7 +136,22 @@ El plugin detecta qué servicios de seguridad tiene contratados el cliente (WAF,
 
 ## Object Cache
 
-Soporte para Redis y APCu como backends de Object Cache de WordPress. El plugin auto-detecta backends disponibles, genera el `object-cache.php` drop-in, y ofrece flush desde el dashboard.
+Soporte para Redis, Memcached y APCu como backends de Object Cache de WordPress. El plugin auto-detecta backends disponibles, genera el `object-cache.php` drop-in, y ofrece flush desde el dashboard. Nunca escribe un drop-in de un backend no soportado (evita un fatal de sitio).
+
+## Page Cache de origen (Origin Shield)
+
+Caché de página **en origen** que sirve el HTML anónimo **antes de que arranque WordPress** (drop-in `advanced-cache.php`), de modo que un *miss* de CDN no regenera WordPress. Es la paridad con el "Disk-Enhanced" de otros plugins, pero integrada con la CDN: **una sola purga invalida edge + origen** a la vez.
+
+- **Backends:** `disk` (sin dependencias), `redis` o `memcached` (lookup en memoria, mejor bajo concurrencia). Seleccionable, con el trade-off explicado en el panel.
+- **Seguro por diseño:** solo GET anónimos, particionado por dispositivo, nunca cachea páginas logadas, respuestas con `Set-Cookie`, 404/búsquedas, ni URLs con query real; allowlist de host y tope de tamaño por entrada para proteger orígenes frágiles.
+- **Opt-in.** Gestiona `WP_CACHE` en `wp-config.php` con backup fuera del webroot, y respeta un `WP_CACHE` definido por el usuario.
+
+## Resiliencia de caché en el edge
+
+- **Perfil de portada propio:** la URL más pedida recibe su política (TTL fresco corto + `stale-while-revalidate` generoso + `stale-if-error`) desde el plugin, no desde una rama VCL a mano. Extensible por plantilla con el filtro `flavor_edge_cache_profile`.
+- **Neutralización de `Vary`:** el documento anónimo nunca varía por `Cookie`/`User-Agent` (que fragmenta la caché en un objeto por cookie de analytics), re-afirmado justo antes de enviar cabeceras.
+- **Cookie guard:** VCL propose-only que limpia cookies no esenciales antes del lookup + sonda de diagnóstico `Set-Cookie`/`Vary: Cookie`.
+- **Serve-stale (grace/keep):** recomendador VCL que deriva `beresp.grace`/`beresp.keep` del `Cache-Control` que emite el plugin, para que el SWR se honre de verdad en el edge.
 
 ## Multisite
 
@@ -189,6 +204,7 @@ Soporte para Redis y APCu como backends de Object Cache de WordPress. El plugin 
 
 ## Changelog
 
+- **1.6.0** — Origin Shield: page cache de origen (disk/Redis/Memcached, sirve antes de WordPress, una purga limpia edge+origen), perfil de caché de portada, neutralización de `Vary: Cookie`/`User-Agent`, speculation inline por defecto, cookie guard (strip VCL + sonda Set-Cookie/Vary) y recomendador VCL grace/keep. Drop-in de object cache Memcached. Endurecimiento: no cachear respuestas con `Set-Cookie`, backup de `wp-config` fuera del webroot, allowlist de host y tope de tamaño en la page cache.
 - **1.5.1** — Fix: el combinado de CSS perdía los estilos añadidos con wp_add_inline_style(); ahora se incluyen en el bundle en orden de cascada. Hardening: allowlist de extensión en Google Fonts y sanitización del post type en Remove Unused CSS.
 - **1.5.0** — Remove Unused CSS, módulo de seguridad (gating de servicios, recomendador de security headers, hardening local), y seguridad del árbol de dependencias JS (Delay/Defer/Combine respetan `deps` de WordPress).
 - **1.4.0** — Comprobación de permisos de escritura en activación; combine con degradación elegante; fixes de CSS de pestañas.
