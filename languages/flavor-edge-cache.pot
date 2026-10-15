@@ -1,22 +1,38 @@
-# Transparent Edge Cache — Spanish Translation
-# Generated: 2026-03-20 10:16+0000
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.0.0\n"
-"PO-Revision-Date: 2026-03-20 10:16+0000\n"
-"Language: es_ES\n"
+"Project-Id-Version: Transparent Edge Cache 1.6.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-15 09:56+0000\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-msgid ".htaccess status:"
+"X-Domain: flavor-edge-cache\n"
+
+msgid ""
+"1. Copy the snippet above. 2. Go to %s. 3. Add the snippet to your VCL "
+"configuration. 4. Deploy."
 msgstr ""
 
-msgid "1. Copy the snippet above. 2. Go to %s. 3. Add the snippet to your VCL configuration. 4. Deploy."
+msgid ""
+"A stray analytics or consent cookie can push the edge to pass every "
+"anonymous request to the origin. These tools keep that from happening."
 msgstr ""
 
 msgid "API Connection"
+msgstr ""
+
+msgid "API connection restored successfully."
+msgstr ""
+
+msgid "API connection still failing. Check your credentials and network."
+msgstr ""
+
+msgid ""
+"Accelerate page-to-page navigation by telling the browser to prefetch or "
+"prerender links before the user clicks."
 msgstr ""
 
 msgid "Activate on all sites"
@@ -28,7 +44,9 @@ msgstr ""
 msgid "Active"
 msgstr ""
 
-msgid "Add any third-party origins not detected above (one per line). DNS is resolved and connections are opened before the browser needs them."
+msgid ""
+"Add any third-party origins not detected above (one per line). DNS is "
+"resolved and connections are opened before the browser needs them."
 msgstr ""
 
 msgid "Add debug headers (X-Flavor-Edge-Keys, X-Flavor-Edge-TTL) to responses"
@@ -37,10 +55,13 @@ msgstr ""
 msgid "Add defer attribute to JS files (load without blocking HTML parsing)"
 msgstr ""
 
-msgid "Add loading="lazy" to below-the-fold images"
+msgid "Add loading=\"lazy\" to below-the-fold images"
 msgstr ""
 
-msgid "Add loading="lazy" to iframes (YouTube, Google Maps, etc.)"
+msgid "Add loading=\"lazy\" to iframes (YouTube, Google Maps, etc.)"
+msgstr ""
+
+msgid "Add this to wp-config.php, then install phpredis:"
 msgstr ""
 
 msgid "Additional DNS Prefetch"
@@ -52,13 +73,23 @@ msgstr ""
 msgid "Advanced Settings"
 msgstr ""
 
+msgid ""
+"After fixing permissions, deactivate and reactivate the plugin to dismiss "
+"this notice."
+msgstr ""
+
+msgid "Aggressive"
+msgstr ""
+
 msgid "All cache purged successfully."
 msgstr ""
 
 msgid "All cache purged!"
 msgstr ""
 
-msgid "All invalidation events are registered in the Transparent Edge dashboard via the API. No local log needed."
+msgid ""
+"All invalidation events are registered in the Transparent Edge dashboard via"
+" the API. No local log needed."
 msgstr ""
 
 msgid "All purge events are logged in the Transparent Edge dashboard."
@@ -67,19 +98,27 @@ msgstr ""
 msgid "Already-minified files (.min.css) and external CSS are skipped."
 msgstr ""
 
-msgid "Already-minified files (.min.js), jQuery, and external scripts are skipped. Conservative approach to avoid breaking JS."
+msgid ""
+"Already-minified files (.min.js), jQuery, and external scripts are skipped. "
+"Conservative approach to avoid breaking JS."
 msgstr ""
 
 msgid "An error occurred."
 msgstr ""
 
-msgid "Another object cache drop-in is already installed (%s). Remove it first."
+msgid ""
+"Another advanced-cache.php drop-in is already installed. Remove it first."
+msgstr ""
+
+msgid ""
+"Another object cache drop-in is already installed (%s). Remove it first."
 msgstr ""
 
 msgid "Are you sure you want to purge all cached content?"
 msgstr ""
 
-msgid "Authentication failed (HTTP %d). Check your Client ID and Client Secret."
+msgid ""
+"Authentication failed (HTTP %d). Check your Client ID and Client Secret."
 msgstr ""
 
 msgid "Auto WebP"
@@ -98,6 +137,12 @@ msgid "Automatically enable the plugin on newly created sites"
 msgstr ""
 
 msgid "Automatically purge cache when content changes"
+msgstr ""
+
+msgid "Balanced"
+msgstr ""
+
+msgid "Block PHP in uploads"
 msgstr ""
 
 msgid "Blog / Magazine"
@@ -133,13 +178,22 @@ msgstr ""
 msgid "Cache purged for post #%d."
 msgstr ""
 
-msgid "Cache rules active in .htaccess. Varnish respects these TTLs from origin."
+msgid ""
+"Cache rules active in .htaccess. Varnish respects these TTLs from origin."
 msgstr ""
 
 msgid "Cache warming"
 msgstr ""
 
 msgid "Cart page"
+msgstr ""
+
+msgid ""
+"Change the backend, then toggle the Page Cache off and on from the card "
+"above to apply it."
+msgstr ""
+
+msgid "Check cookies now"
 msgstr ""
 
 msgid "Checkout page"
@@ -175,16 +229,21 @@ msgstr ""
 msgid "Company ID"
 msgstr ""
 
-msgid "Concatenates all local stylesheets into one file. External and conditional CSS are preserved. Includes minification automatically."
+msgid ""
+"Concatenates all local stylesheets into one file. External and conditional "
+"CSS are preserved. Includes minification automatically."
 msgstr ""
 
 msgid "Configuration applied! Your site is now optimized."
 msgstr ""
 
-msgid "Configure shared API credentials for all sites in the network. Individual sites can override these settings."
+msgid ""
+"Configure shared API credentials for all sites in the network. Individual "
+"sites can override these settings."
 msgstr ""
 
-msgid "Configure when and how cached content is automatically purged from the CDN."
+msgid ""
+"Configure when and how cached content is automatically purged from the CDN."
 msgstr ""
 
 msgid "Connect & Configure"
@@ -205,22 +264,65 @@ msgstr ""
 msgid "Connection successful! Your credentials are valid."
 msgstr ""
 
-msgid "Control how Varnish and browsers cache your content. s-maxage is the CDN TTL (Varnish), max-age is for visitors\'"
+msgid "Conservative"
 msgstr ""
 
-msgid "Copy this VCL snippet and deploy it from your Transparent Edge dashboard (Configuration → VCL). Save your i3 settings above first, then copy the generated snippet."
+msgid "Content-Security-Policy"
+msgstr ""
+
+msgid ""
+"Control how Varnish and browsers cache your content. s-maxage is the CDN TTL"
+" (Varnish), max-age is for visitors' browsers."
+msgstr ""
+
+msgid "Cookie normalisation"
+msgstr ""
+
+msgid "Cookie-strip VCL snippet (propose-only — review before deploying)"
+msgstr ""
+
+msgid "Copy VCL"
+msgstr ""
+
+msgid ""
+"Copy and deploy from your Transparent Edge dashboard. The plugin never "
+"deploys VCL automatically."
+msgstr ""
+
+msgid ""
+"Copy the VCL snippet below and deploy it from your Transparent Edge "
+"dashboard."
+msgstr ""
+
+msgid ""
+"Copy this VCL snippet and deploy it from your Transparent Edge dashboard "
+"(Configuration → VCL). Save your i3 settings above first, then copy the "
+"generated snippet."
 msgstr ""
 
 msgid "Corporate / Institutional"
 msgstr ""
 
+msgid ""
+"Could not find the <?php opening in wp-config.php. Add this near the top "
+"manually: define('WP_CACHE', true);"
+msgstr ""
+
 msgid "Could not remove object-cache.php."
 msgstr ""
 
-msgid "Could not write object-cache.php. Check file permissions on wp-content/."
+msgid "Could not update wp-config.php."
 msgstr ""
 
-msgid "Crawl sitemap.xml after a full purge to warm the CDN cache (no cold MISSes)"
+msgid "Could not write advanced-cache.php. Check permissions on wp-content/."
+msgstr ""
+
+msgid ""
+"Could not write object-cache.php. Check file permissions on wp-content/."
+msgstr ""
+
+msgid ""
+"Crawl sitemap.xml after a full purge to warm the CDN cache (no cold MISSes)"
 msgstr ""
 
 msgid "Dashboard"
@@ -232,13 +334,23 @@ msgstr ""
 msgid "Debug Mode"
 msgstr ""
 
+msgid "Dedicated homepage profile"
+msgstr ""
+
 msgid "Default (WordPress controls it)"
+msgstr ""
+
+msgid ""
+"Defer CSS background images (inline style) until they approach the viewport"
 msgstr ""
 
 msgid "Defer JS"
 msgstr ""
 
 msgid "Defer JS Exclusions"
+msgstr ""
+
+msgid "Degraded (API temporarily unavailable)"
 msgstr ""
 
 msgid "Delay JS"
@@ -250,10 +362,14 @@ msgstr ""
 msgid "Delay JS Execution"
 msgstr ""
 
-msgid "Delay non-critical JavaScript until user interaction (mouse, scroll, touch)"
+msgid ""
+"Delay non-critical JavaScript until user interaction (mouse, scroll, touch)"
 msgstr ""
 
 msgid "Detect the first image and add a preload hint in <head> for faster LCP"
+msgstr ""
+
+msgid "Detected from your Transparent Edge account."
 msgstr ""
 
 msgid "Disable"
@@ -265,6 +381,9 @@ msgstr ""
 msgid "Disable Heartbeat in the post editor (warning: disables autosave)"
 msgstr ""
 
+msgid "Disable XML-RPC"
+msgstr ""
+
 msgid "Disable everywhere (saves max resources)"
 msgstr ""
 
@@ -274,7 +393,18 @@ msgstr ""
 msgid "Disable in Post Editor"
 msgstr ""
 
+msgid ""
+"Disable xmlrpc.php (leave off if you use Jetpack or the WordPress mobile "
+"app)"
+msgstr ""
+
 msgid "Disabled"
+msgstr ""
+
+msgid "Disconnected (API unreachable)"
+msgstr ""
+
+msgid "Disk (default)"
 msgstr ""
 
 msgid "Domain"
@@ -286,13 +416,31 @@ msgstr ""
 msgid "Dynamic Content (HTML)"
 msgstr ""
 
-msgid "Eliminates DNS lookup to fonts.googleapis.com and fonts.gstatic.com. Fonts are cached in wp-content/cache/."
+msgid ""
+"Eliminates DNS lookup to fonts.googleapis.com and fonts.gstatic.com. Fonts "
+"are cached in wp-content/cache/."
+msgstr ""
+
+msgid ""
+"Emit these headers from WordPress (use if you cannot apply the VCL snippet)"
+msgstr ""
+
+msgid "Enable"
 msgstr ""
 
 msgid "Enable %s"
 msgstr ""
 
+msgid "Enable CSP"
+msgstr ""
+
 msgid "Enable Cache Headers"
+msgstr ""
+
+msgid "Enable Speculation Rules"
+msgstr ""
+
+msgid "Enable Speculation Rules to preview the generated JSON."
 msgstr ""
 
 msgid "Enable Transparent Edge Cache (master switch)"
@@ -301,10 +449,21 @@ msgstr ""
 msgid "Enable i3"
 msgstr ""
 
-msgid "Enter your Transparent Edge credentials. You can find them in the TE dashboard under Settings → API."
+msgid "Enabled"
+msgstr ""
+
+msgid "Enforce (unchecked = Report-Only, recommended for testing first)"
+msgstr ""
+
+msgid ""
+"Enter your Transparent Edge credentials. You can find them in the TE "
+"dashboard under Settings → API."
 msgstr ""
 
 msgid "Enter your credentials from the TE dashboard (Settings → API)."
+msgstr ""
+
+msgid "Every 30 minutes (Transparent Edge)"
 msgstr ""
 
 msgid "Exclude from cache"
@@ -316,13 +475,17 @@ msgstr ""
 msgid "Excluded URLs"
 msgstr ""
 
+msgid "Exclusions (one handle or URL fragment per line):"
+msgstr ""
+
 msgid "Flush"
 msgstr ""
 
 msgid "Fonts & Network"
 msgstr ""
 
-msgid "Force all sites to use the network API credentials (sites cannot override)"
+msgid ""
+"Force all sites to use the network API credentials (sites cannot override)"
 msgstr ""
 
 msgid "Frontend Optimization"
@@ -331,7 +494,13 @@ msgstr ""
 msgid "Full Dashboard →"
 msgstr ""
 
+msgid "Full purge when any plugin is activated or deactivated"
+msgstr ""
+
 msgid "Full purge when the active theme is changed"
+msgstr ""
+
+msgid "HSTS"
 msgstr ""
 
 msgid "HTML"
@@ -343,6 +512,9 @@ msgstr ""
 msgid "Hard Purge (immediately removes from cache)"
 msgstr ""
 
+msgid "Header injection"
+msgstr ""
+
 msgid "Heartbeat Behavior"
 msgstr ""
 
@@ -350,6 +522,12 @@ msgid "Heartbeat Control"
 msgstr ""
 
 msgid "Heartbeat Interval"
+msgstr ""
+
+msgid "History"
+msgstr ""
+
+msgid "Homepage (front page)"
 msgstr ""
 
 msgid "Ignored Query Strings"
@@ -361,10 +539,22 @@ msgstr ""
 msgid "Improves LCP. jQuery and core WP scripts are excluded automatically."
 msgstr ""
 
+msgid ""
+"In-memory key lookup, no disk I/O: faster under concurrency and better at "
+"indexing than disk. Reuses your WP_REDIS_* settings. Requires the Redis "
+"service and the phpredis extension."
+msgstr ""
+
 msgid "Inactive"
 msgstr ""
 
 msgid "Inherit credentials"
+msgstr ""
+
+msgid "Inject Speculation Rules header for faster page-to-page navigation"
+msgstr ""
+
+msgid "Inline (recommended)"
 msgstr ""
 
 msgid "Invalidation"
@@ -385,13 +575,37 @@ msgstr ""
 msgid "JavaScript"
 msgstr ""
 
+msgid ""
+"Keeps only the Excluded Cookies above and strips the rest before the cache "
+"lookup, so a stray cookie no longer causes a miss. The plugin never deploys "
+"VCL — copy it into Configuration → VCL on the Transparent Edge dashboard."
+msgstr ""
+
+msgid ""
+"La API ha sido inalcanzable durante múltiples verificaciones. Las "
+"optimizaciones locales siguen activas. La conexión se restaurará "
+"automáticamente cuando la API vuelva a estar disponible."
+msgstr ""
+
+msgid ""
+"Las funciones de invalidación CDN están suspendidas temporalmente (reintento"
+" automático en %d seg). Las optimizaciones locales (minify, lazy load, etc.)"
+" siguen activas."
+msgstr ""
+
+msgid "Lazy Load Background Images"
+msgstr ""
+
 msgid "Lazy Load Iframes"
 msgstr ""
 
 msgid "Lazy Load Images"
 msgstr ""
 
-msgid "Loading..."
+msgid "Limit login attempts"
+msgstr ""
+
+msgid "Local hardening"
 msgstr ""
 
 msgid "Long CDN TTL, Delay JS enabled"
@@ -400,10 +614,16 @@ msgstr ""
 msgid "Long CDN TTL, balanced config"
 msgstr ""
 
+msgid "Max attempts:"
+msgstr ""
+
 msgid "Max image size"
 msgstr ""
 
 msgid "Membership / LMS"
+msgstr ""
+
+msgid "Memcached"
 msgstr ""
 
 msgid "Menus"
@@ -430,7 +650,12 @@ msgstr ""
 msgid "Minify JS files (removes comments, extra whitespace). Cached to disk."
 msgstr ""
 
-msgid "More aggressive than defer — scripts don\'t load at all until user interacts. Best for INP."
+msgid "Mode"
+msgstr ""
+
+msgid ""
+"More aggressive than defer — scripts don't load at all until user interacts."
+" Best for INP."
 msgstr ""
 
 msgid "Multilingual"
@@ -445,7 +670,9 @@ msgstr ""
 msgid "Nginx config snippet (add to your server {} block)"
 msgstr ""
 
-msgid "Nginx detected. Copy the config snippet below and include it in your server {} block."
+msgid ""
+"Nginx detected. Copy the config snippet below and include it in your server "
+"{} block."
 msgstr ""
 
 msgid "No URLs found in sitemap."
@@ -472,31 +699,71 @@ msgstr ""
 msgid "Object Cache enabled with %s backend."
 msgstr ""
 
+msgid "Object cache backend \"%s\" is not supported."
+msgstr ""
+
 msgid "Object cache flushed."
 msgstr ""
 
 msgid "Off"
 msgstr ""
 
-msgid "One handle or pattern per line. Scripts matching these will NOT be combined."
+msgid ""
+"On Nginx, add the equivalent rule to your server config (shown after "
+"saving)."
 msgstr ""
 
-msgid "One handle or pattern per line. Scripts matching these will NOT get defer."
+msgid ""
+"On a CDN miss the edge still has to fetch from the origin. This serves a "
+"pre-rendered copy of anonymous pages before WordPress boots, so that fetch "
+"does not regenerate WordPress — the W3TC \"Disk-Enhanced\" capability. "
+"Enable/disable it from the Page Cache card at the top. Logged-in users, and "
+"any URL or cookie in your exclusions, are never page-cached."
 msgstr ""
 
-msgid "One pattern per line. If a visitor has any of these cookies, the page won\'t be cached."
+msgid ""
+"One handle or pattern per line. Scripts matching these will NOT be combined."
 msgstr ""
 
-msgid "One pattern per line. Regex supported. These URLs will never be cached."
+msgid ""
+"One handle or pattern per line. Scripts matching these will NOT get defer."
+msgstr ""
+
+msgid ""
+"One pattern per line. If a visitor has any of these cookies, the page won't "
+"be cached."
+msgstr ""
+
+msgid ""
+"One pattern per line. Regex supported. These URLs will never be cached."
 msgstr ""
 
 msgid "One pattern per line. jQuery is always excluded."
 msgstr ""
 
-msgid "One per line. These query parameters (UTM, fbclid, etc.) are stripped from the cache key."
+msgid ""
+"One per line. These query parameters (UTM, fbclid, etc.) are stripped from "
+"the cache key."
 msgstr ""
 
-msgid "Only footer scripts are combined. jQuery, WP core, and external scripts stay separate. Includes minification automatically."
+msgid ""
+"Only enable if HTTPS is fully working. Requires valid certificates on all "
+"subdomains."
+msgstr ""
+
+msgid ""
+"Only footer scripts are combined. jQuery, WP core, and external scripts stay"
+" separate. Includes minification automatically."
+msgstr ""
+
+msgid ""
+"Only links to these post types will be prefetched. Unchecked types are "
+"excluded from speculation."
+msgstr ""
+
+msgid ""
+"Open Chrome DevTools → Application → Speculative loads to verify rules are "
+"active."
 msgstr ""
 
 msgid "Optimization"
@@ -505,16 +772,59 @@ msgstr ""
 msgid "Optimizations"
 msgstr ""
 
-msgid "Optimize Core Web Vitals (LCP, INP, CLS) by controlling how assets are loaded, minified, and served."
+msgid ""
+"Optimize Core Web Vitals (LCP, INP, CLS) by controlling how assets are "
+"loaded, minified, and served."
 msgstr ""
 
-msgid "Optimize images on-the-fly at the CDN edge. No processing on your server, zero latency."
+msgid ""
+"Optimize images on-the-fly at the CDN edge. No processing on your server, "
+"zero latency."
 msgstr ""
 
-msgid "Pages, posts, archives, REST API — generated by PHP. These headers are sent by the plugin directly."
+msgid "Origin page cache (serves HTML before WordPress boots)"
+msgstr ""
+
+msgid "Origin page cache disabled."
+msgstr ""
+
+msgid "Origin page cache enabled."
+msgstr ""
+
+msgid "PHP fallback"
+msgstr ""
+
+msgid ""
+"PHP header &rarr; endpoint — a Speculation-Rules header points the browser "
+"to /wp-json/. The browser fetches it on every navigation, so it MUST be "
+"cached at the edge or it hits the origin on each miss. Use only for very "
+"large rule sets."
+msgstr ""
+
+msgid "Page Cache (origin)"
+msgstr ""
+
+msgid "Page cache TTL"
+msgstr ""
+
+msgid "Page cache flushed."
+msgstr ""
+
+msgid ""
+"Pages, posts, archives, REST API — generated by PHP. These headers are sent "
+"by the plugin directly."
 msgstr ""
 
 msgid "Performance Dashboard"
+msgstr ""
+
+msgid "Permissions-Policy"
+msgstr ""
+
+msgid "Please wait a few seconds between purge actions."
+msgstr ""
+
+msgid "Plugin Changes"
 msgstr ""
 
 msgid "Plugin Enabled"
@@ -523,7 +833,25 @@ msgstr ""
 msgid "Plugin Status"
 msgstr ""
 
+msgid "Post types to prefetch"
+msgstr ""
+
 msgid "Posts & Pages"
+msgstr ""
+
+msgid ""
+"Prefetch on click/pointerdown only. Lowest origin load. Recommended for "
+"high-traffic sites and sites with a dedicated mid-tier."
+msgstr ""
+
+msgid ""
+"Prefetch on hover + prerender on click. Fastest navigation, but runs "
+"JavaScript on speculative pages."
+msgstr ""
+
+msgid ""
+"Prefetch on hover. Good balance between speed and origin load. Recommended "
+"for most sites."
 msgstr ""
 
 msgid "Preload LCP"
@@ -541,13 +869,16 @@ msgstr ""
 msgid "Preload via Sitemap"
 msgstr ""
 
+msgid "Prevent execution of PHP files inside /wp-content/uploads/ (Apache)"
+msgstr ""
+
+msgid "Preview"
+msgstr ""
+
 msgid "Purge All Cache"
 msgstr ""
 
 msgid "Purge All Sites"
-msgstr ""
-
-msgid "Purge Log"
 msgstr ""
 
 msgid "Purge This Page"
@@ -556,7 +887,9 @@ msgstr ""
 msgid "Purge This Site (%s)"
 msgstr ""
 
-msgid "Purge events, timestamps, and results are available in your Transparent Edge dashboard:"
+msgid ""
+"Purge events, timestamps, and results are available in your Transparent Edge"
+" dashboard:"
 msgstr ""
 
 msgid "Purge failed: "
@@ -589,22 +922,65 @@ msgstr ""
 msgid "Quick Setup"
 msgstr ""
 
-msgid "Recent Purges (24h)"
+msgid "Recommended VCL snippet"
 msgstr ""
 
-msgid "Recent cache invalidation events (last 7 days)."
+msgid "Redis"
+msgstr ""
+
+msgid "Redis AUTH failed. Check WP_REDIS_PASSWORD in wp-config.php."
+msgstr ""
+
+msgid "Redis server detected, but PHP extension (phpredis) is not installed."
+msgstr ""
+
+msgid "Redis server detected, but requires a password."
+msgstr ""
+
+msgid "Redis server requires a password. Add to wp-config.php:"
+msgstr ""
+
+msgid ""
+"Redis server running, but PHP extension (phpredis) is not installed. Install"
+" it with: sudo apt install php-redis && sudo systemctl restart php-fpm"
 msgstr ""
 
 msgid "Reduce frequency (recommended)"
 msgstr ""
 
+msgid "Referrer-Policy"
+msgstr ""
+
 msgid "Refetch after purge"
+msgstr ""
+
+msgid "Reintentar ahora"
+msgstr ""
+
+msgid "Remove Unused CSS"
 msgstr ""
 
 msgid "Remove comments, extra whitespace, and blank lines from HTML"
 msgstr ""
 
-msgid "Rules not in .htaccess. Save settings to write them, or check file permissions."
+msgid "Restrict geolocation, microphone, camera"
+msgstr ""
+
+msgid ""
+"Rules are written into the page &lt;head&gt;, inside the HTML the edge "
+"already caches. No separate request, so nothing hits the origin to hand out "
+"the rules."
+msgstr ""
+
+msgid ""
+"Rules not in .htaccess. Save settings to write them, or check file "
+"permissions."
+msgstr ""
+
+msgid ""
+"Same in-memory advantage as Redis; its flush is generation-based so it never"
+" wipes a store shared with the object cache. Requires the Memcached service "
+"and extension."
 msgstr ""
 
 msgid "Save Network Settings"
@@ -614,6 +990,18 @@ msgid "Save Settings"
 msgstr ""
 
 msgid "Saving..."
+msgstr ""
+
+msgid "Security"
+msgstr ""
+
+msgid "Security headers"
+msgstr ""
+
+msgid ""
+"Select the headers you want. The plugin generates a VCL snippet you apply "
+"from your Transparent Edge panel (recommended), or emits them from PHP as a "
+"fallback."
 msgstr ""
 
 msgid "Self-host Google Fonts"
@@ -628,10 +1016,20 @@ msgstr ""
 msgid "Separate cache per language (enable if using WPML/Polylang)"
 msgstr ""
 
+msgid "Serve only the CSS each page actually uses (major LCP improvement)"
+msgstr ""
+
+msgid ""
+"Serve-stale VCL (grace / keep) — propose-only, makes stale-while-revalidate "
+"actually work"
+msgstr ""
+
 msgid "Server"
 msgstr ""
 
-msgid "Server type not detected. Configure Cache-Control headers in your web server for static files."
+msgid ""
+"Server type not detected. Configure Cache-Control headers in your web server"
+" for static files."
 msgstr ""
 
 msgid "Server:"
@@ -670,13 +1068,29 @@ msgstr ""
 msgid "Soft Purge (recommended — serves stale if origin fails)"
 msgstr ""
 
+msgid "Speculation Rules"
+msgstr ""
+
+msgid "Stale-if-error"
+msgstr ""
+
+msgid "Stale-while-revalidate"
+msgstr ""
+
 msgid "Static Resources (CSS, JS, images, fonts, video)"
 msgstr ""
 
-msgid "Static asset invalidation is automatic: media uploads, theme and plugin updates trigger Varnish purge. WordPress version strings (?ver=X) on CSS/JS handle browser cache-busting."
+msgid ""
+"Static asset invalidation is automatic: media uploads, theme and plugin "
+"updates trigger Varnish purge. WordPress version strings (?ver=X) on CSS/JS "
+"handle browser cache-busting."
 msgstr ""
 
-msgid "Static files are served by the web server, not PHP. The plugin sets Cache-Control headers so Varnish respects these TTLs from the origin. When assets change (media uploads, theme/plugin updates), the plugin invalidates them automatically."
+msgid ""
+"Static files are served by the web server, not PHP. The plugin sets Cache-"
+"Control headers so Varnish respects these TTLs from the origin. When assets "
+"change (media uploads, theme/plugin updates), the plugin invalidates them "
+"automatically."
 msgstr ""
 
 msgid "Step 1: Confirm your site type"
@@ -691,6 +1105,9 @@ msgstr ""
 msgid "Stock changes"
 msgstr ""
 
+msgid "Storage backend"
+msgstr ""
+
 msgid "Surrogate-Keys"
 msgstr ""
 
@@ -700,7 +1117,19 @@ msgstr ""
 msgid "TE Cache Network"
 msgstr ""
 
-msgid "Tag every page with content identifiers for surgical cache invalidation"
+msgid "TE Cache ⚠"
+msgstr ""
+
+msgid ""
+"Tag every page with content identifiers for surgical cache invalidation"
+msgstr ""
+
+msgid ""
+"Tells modern browsers (Chrome 109+) to prefetch or prerender links before "
+"the user clicks. Progressive enhancement — ignored by unsupported browsers."
+msgstr ""
+
+msgid "Temporarily block an IP after too many failed logins"
 msgstr ""
 
 msgid "Test Connection"
@@ -709,19 +1138,76 @@ msgstr ""
 msgid "Testing connection..."
 msgstr ""
 
-msgid "The Heartbeat API sends AJAX requests every 15-60s for autosave, post locking, etc. Reducing it saves server resources."
+msgid ""
+"The Heartbeat API sends AJAX requests every 15-60s for autosave, post "
+"locking, etc. Reducing it saves server resources."
+msgstr ""
+
+msgid ""
+"The anonymous homepage sets a cookie (%s). Varnish will not store a response"
+" that carries Set-Cookie, so every hit becomes a miss. Find the plugin/theme"
+" setting it and stop it on anonymous requests."
 msgstr ""
 
 msgid "The drop-in was not installed by this plugin."
 msgstr ""
 
+msgid ""
+"The first two background images are kept eager to protect LCP. Add data-no-"
+"lazy to opt an element out."
+msgstr ""
+
+msgid ""
+"The following directories are not writable. CSS/JS combine and Google Fonts "
+"self-hosting will not work until this is resolved:"
+msgstr ""
+
+msgid ""
+"The homepage is the most-requested URL and the one that must never fall back"
+" to the origin. Give it its own policy — a short fresh window plus a "
+"generous stale-while-revalidate — so an expiry is served stale instantly "
+"while a single request revalidates behind it, instead of a miss storm. When "
+"off, the homepage uses the global HTML profile above."
+msgstr ""
+
+msgid ""
+"The homepage profile sends stale-while-revalidate and stale-if-error, but "
+"Varnish only serves stale during revalidation when grace/keep match. This "
+"snippet derives them from the Cache-Control the plugin sends, so they stay "
+"in sync. The plugin never deploys VCL — copy it into Configuration → VCL."
+msgstr ""
+
+msgid ""
+"The origin still advertises Vary: Cookie. The plugin neutralises this at the"
+" edge-facing response, but the source (theme/plugin) is worth fixing too."
+msgstr ""
+
 msgid "Theme Switch"
 msgstr ""
 
-msgid "These credentials are used as defaults for all sites. Each site can override them in their own TE Cache settings."
+msgid ""
+"These credentials are used as defaults for all sites. Each site can override"
+" them in their own TE Cache settings."
 msgstr ""
 
-msgid "These domains are prefetched automatically based on your active plugins. No action needed."
+msgid ""
+"These domains are prefetched automatically based on your active plugins. No "
+"action needed."
+msgstr ""
+
+msgid ""
+"This can trigger analytics, remarketing pixels (Facebook, LinkedIn, Criteo),"
+" and third-party API calls before the user actually visits the page. Make "
+"sure your analytics implementation filters requests with the Sec-Purpose: "
+"prefetch header before enabling this mode."
+msgstr ""
+
+msgid "Too many failed login attempts. Please try again in a few minutes."
+msgstr ""
+
+msgid ""
+"Transparent Edge API: %d fallo(s) recientes de conexión. El plugin sigue "
+"funcionando, pero revisa la configuración si el problema persiste."
 msgstr ""
 
 msgid "Transparent Edge Cache"
@@ -733,10 +1219,35 @@ msgstr ""
 msgid "Transparent Edge Cache — Network Settings"
 msgstr ""
 
-msgid "Transparent Edge Cache: View file not found. Please reinstall the plugin."
+msgid "Transparent Edge Cache — Write permissions required"
 msgstr ""
 
-msgid "Use with caution. Without autosave, unsaved work is lost if the browser crashes."
+msgid ""
+"Transparent Edge Cache: View file not found. Please reinstall the plugin."
+msgstr ""
+
+msgid "Transparent Edge security services"
+msgstr ""
+
+msgid "Use these values for the homepage instead of the global HTML TTLs"
+msgstr ""
+
+msgid ""
+"Use with caution. Without autosave, unsaved work is lost if the browser "
+"crashes."
+msgstr ""
+
+msgid ""
+"Used CSS is generated in the background per template and served inline; the "
+"rest is deferred. Generation never blocks visitors, and if it fails the "
+"original CSS is served unchanged."
+msgstr ""
+
+msgid ""
+"VCL (edge) — header added by Varnish. Same endpoint caveat as PHP above."
+msgstr ""
+
+msgid "VCL Snippet"
 msgstr ""
 
 msgid "VCL Snippet for Query String Stripping (deploy in TE dashboard)"
@@ -751,7 +1262,13 @@ msgstr ""
 msgid "Vary by Language"
 msgstr ""
 
+msgid "Ver configuración"
+msgstr ""
+
 msgid "View Invalidation History →"
+msgstr ""
+
+msgid "View generated JSON"
 msgstr ""
 
 msgid "View in TE Dashboard →"
@@ -766,7 +1283,7 @@ msgstr ""
 msgid "We detected your site as:"
 msgstr ""
 
-msgid "We\'ll optimize cache settings based on your site type."
+msgid "We'll optimize cache settings based on your site type."
 msgstr ""
 
 msgid "WebP Quality"
@@ -781,7 +1298,26 @@ msgstr ""
 msgid "WooCommerce / Online Store"
 msgstr ""
 
+msgid "WordPress-level protections. Available for all clients."
+msgstr ""
+
+msgid "X-Content-Type-Options"
+msgstr ""
+
+msgid "X-Frame-Options"
+msgstr ""
+
+msgid ""
+"Zero dependencies, works anywhere — true W3TC Disk-Enhanced parity. Each "
+"lookup is a filesystem read, so on slow or network disk (NFS) and under very"
+" high concurrency the I/O and stat cost shows, and lookups index slower than"
+" an in-memory store."
+msgstr ""
+
 msgid "active"
+msgstr ""
+
+msgid "backend"
 msgstr ""
 
 msgid "e.g., 500k, 1m. Progressive quality reduction to stay under limit."
@@ -796,9 +1332,6 @@ msgstr ""
 msgid "i3 Images"
 msgstr ""
 
-msgid "invalidation events"
-msgstr ""
-
 msgid "optimizations active"
 msgstr ""
 
@@ -811,19 +1344,65 @@ msgstr ""
 msgid "seconds. Default: 2592000 (30 days)."
 msgstr ""
 
-msgid "seconds. Default: 3600 (1h). Reduces unnecessary checks to CDN nodes."
+msgid "seconds. Default: 30. Low so breaking news is picked up quickly."
 msgstr ""
 
-msgid "seconds. Default: 60 (1min). Low value = visitors always get fresh content."
+msgid "seconds. Default: 300 (5 min). Short fresh window for a news homepage."
+msgstr ""
+
+msgid ""
+"seconds. Default: 300. After expiry the edge serves the stale homepage "
+"instantly and a single request revalidates behind it — this is what shields "
+"a weak origin."
+msgstr ""
+
+msgid ""
+"seconds. Default: 300. It is only a fallback for edge misses, so a short "
+"value is fine; a purge clears it anyway."
+msgstr ""
+
+msgid "seconds. Default: 3600 (1h). Reduces unnecessary checks to CDN nodes."
 msgstr ""
 
 msgid "seconds. Default: 86400 (1 day)."
 msgstr ""
 
-msgid "seconds. Default: 86400 (24h). How long Varnish keeps HTML pages."
+msgid ""
+"seconds. Default: 86400 (24h). Airbag: if the origin returns 5xx, serve the "
+"last good homepage instead of an error."
+msgstr ""
+
+msgid "within a 15-minute window"
+msgstr ""
+
+msgid ""
+"wp-config.php already sets WP_CACHE to false. Change it to true to enable "
+"the page cache."
+msgstr ""
+
+msgid "wp-config.php is not writable. Add this near the top manually: %s"
 msgstr ""
 
 msgid "⏹ Stop Preload"
+msgstr ""
+
+msgid ""
+"⚠ Aggressive mode runs JavaScript on speculative pages.\n"
+"\n"
+"This can trigger analytics, remarketing pixels, and third-party API calls before the user visits the page.\n"
+"\n"
+"Make sure your analytics filters requests with Sec-Purpose: prefetch.\n"
+"\n"
+"Do you want to continue?"
+msgstr ""
+
+msgid "⚠ Important: Aggressive mode runs JavaScript on speculative pages."
+msgstr ""
+
+msgid "⚠ Transparent Edge API desconectada."
+msgstr ""
+
+msgid "⚠ Transparent Edge API no disponible."
 msgstr ""
 
 msgid "✓ Active"
