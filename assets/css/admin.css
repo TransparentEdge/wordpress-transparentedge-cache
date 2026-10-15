@@ -47,21 +47,22 @@
 .te-tabs {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0;
+	gap: 4px;
+	align-items: flex-end;
 	margin-bottom: 0;
+	padding-bottom: 0;
 	border-bottom: 2px solid #0073aa;
 }
 .te-tab {
 	padding: 8px 14px;
 	background: #f1f1f1;
 	border: 1px solid #ccc;
-	border-bottom: 2px solid #0073aa;
 	border-radius: 4px 4px 0 0;
 	cursor: pointer;
 	font-size: 13px;
 	font-weight: 500;
 	color: #555;
-	margin: 0 2px -2px 0;
+	margin: 0;
 	transition: all 0.15s;
 	white-space: nowrap;
 }
@@ -69,7 +70,7 @@
 .te-tab.active {
 	background: #fff;
 	color: #0073aa;
-	border-color: #0073aa #0073aa #fff;
+	border-color: #0073aa;
 	font-weight: 600;
 }
 

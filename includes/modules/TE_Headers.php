@@ -275,9 +275,51 @@ class TE_Headers {
 		 *
 		 * @param array $vary Vary tokens.
 		 */
+		// Merge any Vary another PHP layer already set, so a legitimate token a
+		// theme/plugin added is not silently dropped (replace -> merge).
+		foreach ( self::existing_vary_tokens() as $tok ) {
+			$vary[] = $tok;
+		}
+
 		$vary = apply_filters( 'flavor_edge_vary_headers', $vary );
 
-		return array_values( array_unique( array_filter( array_map( 'trim', (array) $vary ) ) ) );
+		// Sanitise: Cookie / User-Agent (and *) fragment the anonymous cache into
+		// one object per client string and never map to a real anonymous variant,
+		// so they are stripped unconditionally — even when the filter or another
+		// layer tries to add them. This is what keeps the neutralisation intact
+		// while still merging a legitimate foreign Vary.
+		$forbidden = array( 'cookie', 'user-agent', '*' );
+		$out       = array();
+		foreach ( (array) $vary as $v ) {
+			$v = trim( (string) $v );
+			if ( '' === $v || in_array( strtolower( $v ), $forbidden, true ) ) {
+				continue;
+			}
+			$out[] = $v;
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Tokens from any Vary header already present on the response (set by another
+	 * PHP layer), so get_safe_vary can merge instead of blindly replacing.
+	 *
+	 * @return array
+	 */
+	private static function existing_vary_tokens() {
+		$tokens = array();
+		foreach ( headers_list() as $h ) {
+			if ( 0 === stripos( $h, 'vary:' ) ) {
+				$val = trim( substr( $h, 5 ) );
+				foreach ( explode( ',', $val ) as $t ) {
+					$t = trim( $t );
+					if ( '' !== $t ) {
+						$tokens[] = $t;
+					}
+				}
+			}
+		}
+		return $tokens;
 	}
 
 	/**

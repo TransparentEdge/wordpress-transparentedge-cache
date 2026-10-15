@@ -54,17 +54,16 @@ class TE_Settings {
 			'front_page_s_maxage'       => 300,    // edge fresh window (news home).
 			'front_page_swr'            => 300,    // serve stale instantly, revalidate behind.
 			'front_page_sie'            => 86400,  // airbag: serve day-old home on origin 5xx.
-			// Origin page cache (v1.6.0). Disk-Enhanced style: serves rendered
-			// anonymous HTML before WordPress boots, so a CDN miss does NOT
-			// regenerate WordPress (the W3TC capability this client relied on).
+			// Origin page cache (v1.6.0): serves rendered anonymous HTML before
+			// WordPress boots, so a CDN miss does NOT regenerate WordPress.
 			'page_cache_enabled'    => false,
 			'page_cache_backend'    => 'disk',   // 'disk' | 'redis' | 'memcached'.
 			'page_cache_ttl'        => 300,      // seconds; fallback store for edge misses.
 			'static_s_maxage'       => 2592000,  // 30 days in Varnish.
 			'static_max_age'        => 86400,    // 1 day in browser.
 			'surrogate_keys'        => true,
-			'vary_device'           => true,
-			'vary_language'         => false,    // Auto-enabled when WPML/Polylang detected.
+			'vary_device'           => false,   // Opt-in. The plugin serves the same HTML to all devices (device split is done at the edge / by CSS), so Vary: X-Device only duplicates cache objects without a real variant.
+			'vary_language'         => false,   // Opt-in. Only needed if the origin returns different content for the SAME URL by Accept-Language (rare). WPML/Polylang put the language in the URL, so it is not needed there.
 
 			// Invalidation module.
 			'invalidation_enabled'  => true,
@@ -328,9 +327,9 @@ class TE_Settings {
 				break;
 		}
 
-		// Auto-detect multilingual plugins.
+		// Multilingual plugins present: still do NOT enable Vary: Accept-Language (URL carries the language).
 		if ( defined( 'ICL_SITEPRESS_VERSION' ) || defined( 'POLYLANG_VERSION' ) ) {
-			$settings['vary_language'] = true;
+			$settings['vary_language'] = false; // never force-on: WPML/Polylang carry the language in the URL, so Accept-Language only fragments the cache.
 		}
 
 		self::save( $settings );

@@ -179,16 +179,34 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 								<div class="te-dash-card">
 					<h4><?php esc_html_e( 'Page Cache (origin)', 'flavor-edge-cache' ); ?></h4>
-					<?php $pc_on = \flavor_edge\TE_PageCache::is_enabled(); ?>
-					<span class="te-dash-value" style="color:<?php echo $pc_on ? '#155724' : '#888'; ?>;">
-						<?php echo $pc_on ? esc_html__( 'Enabled', 'flavor-edge-cache' ) : esc_html__( 'Disabled', 'flavor-edge-cache' ); ?>
+					<?php
+						$pc_on        = \flavor_edge\TE_PageCache::is_enabled();
+							$pc_state     = \flavor_edge\TE_PageCache::activation_state();
+						$pc_backend   = $settings['page_cache_backend'];
+						// Disk always works; redis/memcached need their PHP extension, or the
+						// store silently caches nothing (page cache "on" but no origin shield).
+						$pc_available = ( 'disk' === $pc_backend ) || ! empty( $backends[ $pc_backend ] );
+						?>
+					<?php
+							$pc_colors = array( 'disabled' => '#888', 'pending' => '#b36b00', 'active' => '#155724' );
+							$pc_labels = array(
+								'disabled' => esc_html__( 'Disabled', 'flavor-edge-cache' ),
+								'pending'  => esc_html__( 'Enabled (not serving)', 'flavor-edge-cache' ),
+								'active'   => esc_html__( 'Enabled', 'flavor-edge-cache' ),
+							);
+							?>
+						<span class="te-dash-value" style="color:<?php echo esc_attr( $pc_colors[ $pc_state['state'] ] ); ?>;">
+						<?php echo esc_html( $pc_labels[ $pc_state['state'] ] ); ?>
 					</span>
 					<span class="te-dash-detail">
-						<?php echo esc_html( ucfirst( $settings['page_cache_backend'] ) ); ?> <?php esc_html_e( 'backend', 'flavor-edge-cache' ); ?>
+						<?php if ( 'pending' === $pc_state['state'] ) : ?><span style="display:block;color:#b36b00;margin-bottom:4px;">⚠ <?php echo esc_html( $pc_state['reason'] ); ?></span><?php endif; ?><?php echo esc_html( ucfirst( $pc_backend ) ); ?> <?php esc_html_e( 'backend', 'flavor-edge-cache' ); ?>
 						— <?php echo esc_html( (int) $settings['page_cache_ttl'] ); ?>s TTL
 					</span>
-					<?php if ( ! $pc_on ) : ?>
-						<button type="button" class="button button-small te-enable-page-cache" style="margin-top:8px;"><?php esc_html_e( 'Enable', 'flavor-edge-cache' ); ?></button>
+					<?php if ( ! $pc_available ) : ?>
+							<span class="te-dash-detail" style="color:#b32d2e;">⚠ <?php printf( esc_html__( '%s selected but its PHP extension is not installed — nothing would be cached. Pick Disk, or install the extension.', 'flavor-edge-cache' ), esc_html( ucfirst( $pc_backend ) ) ); ?></span>
+						<?php endif; ?>
+						<?php if ( ! $pc_on ) : ?>
+						<button type="button" class="button button-small te-enable-page-cache"<?php echo $pc_available ? '' : ' disabled title="' . esc_attr__( 'The selected backend is not available on this server.', 'flavor-edge-cache' ) . '"'; ?> style="margin-top:8px;"><?php esc_html_e( 'Enable', 'flavor-edge-cache' ); ?></button>
 					<?php else : ?>
 						<button type="button" class="button button-small te-flush-page-cache" style="margin-top:8px;"><?php esc_html_e( 'Flush', 'flavor-edge-cache' ); ?></button>
 						<button type="button" class="button button-small te-disable-page-cache" style="margin-top:8px;"><?php esc_html_e( 'Disable', 'flavor-edge-cache' ); ?></button>
@@ -383,7 +401,7 @@ defined( 'ABSPATH' ) || exit;
 					</tr>
 					<tr>
 						<th colspan="2">
-							<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'On a CDN miss the edge still has to fetch from the origin. This serves a pre-rendered copy of anonymous pages before WordPress boots, so that fetch does not regenerate WordPress — the W3TC "Disk-Enhanced" capability. Enable/disable it from the Page Cache card at the top. Logged-in users, and any URL or cookie in your exclusions, are never page-cached.', 'flavor-edge-cache' ); ?></p>
+							<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'On a CDN miss the edge still has to fetch from the origin. This serves a pre-rendered copy of anonymous pages before WordPress boots, so that fetch does not regenerate WordPress. Enable/disable it from the Page Cache card at the top. Logged-in users, and any URL or cookie in your exclusions, are never page-cached.', 'flavor-edge-cache' ); ?></p>
 						</th>
 					</tr>
 					<tr>
@@ -393,17 +411,19 @@ defined( 'ABSPATH' ) || exit;
 								<label style="display:block;margin-bottom:6px;">
 									<input type="radio" name="page_cache_backend" value="disk" <?php checked( $settings['page_cache_backend'], 'disk' ); ?> />
 									<strong><?php esc_html_e( 'Disk (default)', 'flavor-edge-cache' ); ?></strong>
-									— <?php esc_html_e( 'Zero dependencies, works anywhere — true W3TC Disk-Enhanced parity. Each lookup is a filesystem read, so on slow or network disk (NFS) and under very high concurrency the I/O and stat cost shows, and lookups index slower than an in-memory store.', 'flavor-edge-cache' ); ?>
+									— <?php esc_html_e( 'Zero dependencies, works anywhere. Each lookup is a filesystem read, so on slow or network disk (NFS) and under very high concurrency the I/O and stat cost shows, and lookups index slower than an in-memory store.', 'flavor-edge-cache' ); ?>
 								</label>
 								<label style="display:block;margin-bottom:6px;">
 									<input type="radio" name="page_cache_backend" value="redis" <?php checked( $settings['page_cache_backend'], 'redis' ); ?> />
 									<strong><?php esc_html_e( 'Redis', 'flavor-edge-cache' ); ?></strong>
-									— <?php esc_html_e( 'In-memory key lookup, no disk I/O: faster under concurrency and better at indexing than disk. Reuses your WP_REDIS_* settings. Requires the Redis service and the phpredis extension.', 'flavor-edge-cache' ); ?>
+									<?php if ( ! empty( $backends['redis'] ) ) : ?><span style="color:#155724;font-weight:600;">✓ <?php esc_html_e( 'Available', 'flavor-edge-cache' ); ?></span><?php elseif ( ! empty( $backends['redis_server'] ) ) : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Redis server detected, but the phpredis extension is not installed — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php else : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Not available on this server — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php endif; ?>
+										— <?php esc_html_e( 'In-memory key lookup, no disk I/O: faster under concurrency and better at indexing than disk. Reuses your WP_REDIS_* settings. Requires the Redis service and the phpredis extension.', 'flavor-edge-cache' ); ?>
 								</label>
 								<label style="display:block;margin-bottom:6px;">
 									<input type="radio" name="page_cache_backend" value="memcached" <?php checked( $settings['page_cache_backend'], 'memcached' ); ?> />
 									<strong><?php esc_html_e( 'Memcached', 'flavor-edge-cache' ); ?></strong>
-									— <?php esc_html_e( 'Same in-memory advantage as Redis; its flush is generation-based so it never wipes a store shared with the object cache. Requires the Memcached service and extension.', 'flavor-edge-cache' ); ?>
+									<?php if ( ! empty( $backends['memcached'] ) ) : ?><span style="color:#155724;font-weight:600;">✓ <?php esc_html_e( 'Available', 'flavor-edge-cache' ); ?></span><?php else : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Not available on this server (Memcached PHP extension missing) — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php endif; ?>
+										— <?php esc_html_e( 'Same in-memory advantage as Redis; its flush is generation-based so it never wipes a store shared with the object cache. Requires the Memcached service and extension.', 'flavor-edge-cache' ); ?>
 								</label>
 							</fieldset>
 							<p class="description" style="margin-top:4px;"><?php esc_html_e( 'Change the backend, then toggle the Page Cache off and on from the card above to apply it.', 'flavor-edge-cache' ); ?></p>

@@ -10,7 +10,7 @@
  * serve path and the store path from ever drifting apart.
  *
  * Backends:
- *   - disk       : zero dependencies, true "Disk-Enhanced" parity. Each lookup is
+ *   - disk       : zero dependencies, works anywhere. Each lookup is
  *                  a filesystem read, so on slow/network disk or very high
  *                  concurrency the I/O and stat cost shows.
  *   - redis      : in-memory key lookup, no disk I/O — faster under concurrency.
@@ -81,8 +81,7 @@ class TE_PageCache_Store {
 	 * Build the cache key for a request.
 	 *
 	 * The device segment mirrors the edge's X-Device split (desktop/mobile/app),
-	 * so a phone and a desktop never collide on one cached document — exactly
-	 * what W3TC did with its a14-w3tc-xdevice.php.
+	 * so a phone and a desktop never collide on one cached document.
 	 *
 	 * @param string $host   Request host.
 	 * @param string $uri    Request URI (may include a query string).

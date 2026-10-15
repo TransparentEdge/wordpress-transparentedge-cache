@@ -140,7 +140,7 @@ Soporte para Redis, Memcached y APCu como backends de Object Cache de WordPress.
 
 ## Page Cache de origen (Origin Shield)
 
-Caché de página **en origen** que sirve el HTML anónimo **antes de que arranque WordPress** (drop-in `advanced-cache.php`), de modo que un *miss* de CDN no regenera WordPress. Es la paridad con el "Disk-Enhanced" de otros plugins, pero integrada con la CDN: **una sola purga invalida edge + origen** a la vez.
+Caché de página **en origen** que sirve el HTML anónimo **antes de que arranque WordPress** (drop-in `advanced-cache.php`), de modo que un *miss* de CDN no regenera WordPress. Integrado con la CDN: **una sola purga invalida edge + origen** a la vez.
 
 - **Backends:** `disk` (sin dependencias), `redis` o `memcached` (lookup en memoria, mejor bajo concurrencia). Seleccionable, con el trade-off explicado en el panel.
 - **Seguro por diseño:** solo GET anónimos, particionado por dispositivo, nunca cachea páginas logadas, respuestas con `Set-Cookie`, 404/búsquedas, ni URLs con query real; allowlist de host y tope de tamaño por entrada para proteger orígenes frágiles.
@@ -204,7 +204,7 @@ Caché de página **en origen** que sirve el HTML anónimo **antes de que arranq
 
 ## Changelog
 
-- **1.6.0** — Origin Shield: page cache de origen (disk/Redis/Memcached, sirve antes de WordPress, una purga limpia edge+origen), perfil de caché de portada, neutralización de `Vary: Cookie`/`User-Agent`, speculation inline por defecto, cookie guard (strip VCL + sonda Set-Cookie/Vary) y recomendador VCL grace/keep. Drop-in de object cache Memcached. Endurecimiento: no cachear respuestas con `Set-Cookie`, backup de `wp-config` fuera del webroot, allowlist de host y tope de tamaño en la page cache.
+- **1.6.0** — Origin Shield: page cache de origen (disk/Redis/Memcached, sirve antes de WordPress, una purga limpia edge+origen), perfil de caché de portada, neutralización de `Vary: Cookie`/`User-Agent`, speculation inline por defecto, cookie guard (strip VCL + sonda Set-Cookie/Vary) y recomendador VCL grace/keep. Drop-in de object cache Memcached. Endurecimiento: no cachear respuestas con `Set-Cookie`, backup de `wp-config` fuera del webroot, allowlist de host y tope de tamaño en la page cache. **Fix de fragmentación de caché:** `Vary: X-Device` y `Vary: Accept-Language` dejan de enviarse por defecto (no corresponden a variantes reales y partían la caché), ahora opt-in, el `Vary` se fusiona con el existente sin perder la neutralización de Cookie/User-Agent, y una migración one-time los apaga en instalaciones existentes con aviso. El selector de backend avisa si Redis/Memcached no está disponible (y retiene Activar), y el panel distingue "Activada" real de "Activada (no sirve)" cuando falta `WP_CACHE`. Barra de pestañas que envuelve limpia. Retirada la redacción de "paridad" con terceros.
 - **1.5.1** — Fix: el combinado de CSS perdía los estilos añadidos con wp_add_inline_style(); ahora se incluyen en el bundle en orden de cascada. Hardening: allowlist de extensión en Google Fonts y sanitización del post type en Remove Unused CSS.
 - **1.5.0** — Remove Unused CSS, módulo de seguridad (gating de servicios, recomendador de security headers, hardening local), y seguridad del árbol de dependencias JS (Delay/Defer/Combine respetan `deps` de WordPress).
 - **1.4.0** — Comprobación de permisos de escritura en activación; combine con degradación elegante; fixes de CSS de pestañas.

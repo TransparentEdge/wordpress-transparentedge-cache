@@ -714,14 +714,6 @@ msgid ""
 msgstr ""
 
 msgid ""
-"On a CDN miss the edge still has to fetch from the origin. This serves a "
-"pre-rendered copy of anonymous pages before WordPress boots, so that fetch "
-"does not regenerate WordPress — the W3TC \"Disk-Enhanced\" capability. "
-"Enable/disable it from the Page Cache card at the top. Logged-in users, and "
-"any URL or cookie in your exclusions, are never page-cached."
-msgstr ""
-
-msgid ""
 "One handle or pattern per line. Scripts matching these will NOT be combined."
 msgstr ""
 
@@ -1307,13 +1299,6 @@ msgstr ""
 msgid "X-Frame-Options"
 msgstr ""
 
-msgid ""
-"Zero dependencies, works anywhere — true W3TC Disk-Enhanced parity. Each "
-"lookup is a filesystem read, so on slow or network disk (NFS) and under very"
-" high concurrency the I/O and stat cost shows, and lookups index slower than"
-" an in-memory store."
-msgstr ""
-
 msgid "active"
 msgstr ""
 
@@ -1421,4 +1406,66 @@ msgid "🔄 Preload Cache via Sitemap"
 msgstr ""
 
 msgid "🗑️ Purge All Cache"
+msgstr ""
+
+msgid ""
+"%s selected but its PHP extension is not installed — nothing would be "
+"cached. Pick Disk, or install the extension."
+msgstr ""
+
+msgid "Available"
+msgstr ""
+
+msgid ""
+"Not available on this server (Memcached PHP extension missing) — selecting "
+"this would cache nothing."
+msgstr ""
+
+msgid "Not available on this server — selecting this would cache nothing."
+msgstr ""
+
+msgid ""
+"On a CDN miss the edge still has to fetch from the origin. This serves a "
+"pre-rendered copy of anonymous pages before WordPress boots, so that fetch "
+"does not regenerate WordPress. Enable/disable it from the Page Cache card at"
+" the top. Logged-in users, and any URL or cookie in your exclusions, are "
+"never page-cached."
+msgstr ""
+
+msgid ""
+"Redis server detected, but the phpredis extension is not installed — "
+"selecting this would cache nothing."
+msgstr ""
+
+msgid "The selected backend is not available on this server."
+msgstr ""
+
+msgid ""
+"Zero dependencies, works anywhere. Each lookup is a filesystem read, so on "
+"slow or network disk (NFS) and under very high concurrency the I/O and stat "
+"cost shows, and lookups index slower than an in-memory store."
+msgstr ""
+
+msgid "Enabled (not serving)"
+msgstr ""
+
+msgid ""
+"The advanced-cache.php drop-in is missing. Toggle the page cache off and on "
+"to rewrite it."
+msgstr ""
+
+msgid ""
+"WP_CACHE is not set in wp-config.php, so WordPress never loads the cache. "
+"Add near the top: define('WP_CACHE', true);"
+msgstr ""
+
+msgid ""
+"This update turned off Vary: X-Device and Vary: Accept-Language, which were "
+"splitting your edge cache into extra copies without serving different "
+"content (they were hurting your hit ratio). If your site genuinely serves "
+"different HTML for the same URL per device or per browser language, you can "
+"switch them back on under TE Cache → Cache."
+msgstr ""
+
+msgid "Transparent Edge Cache — cache fragmentation fixed"
 msgstr ""

@@ -4,7 +4,7 @@
  *
  * Wires the storage engine (TE_PageCache_Store) into WordPress:
  *   - SERVE: generates the advanced-cache.php drop-in that serves a cached
- *     document before WordPress boots (Disk-Enhanced style), and toggles
+ *     document before WordPress boots, and toggles
  *     WP_CACHE in wp-config.php.
  *   - STORE: buffers anonymous cacheable responses and stores them on shutdown.
  *   - INVALIDATE: on any plugin purge, clears the page cache too, so one purge
@@ -63,6 +63,44 @@ class TE_PageCache {
 
 	public static function is_enabled() {
 		return ! empty( TE_Settings::get( 'page_cache_enabled' ) );
+	}
+
+	/**
+	 * Whether the origin page cache is actually SERVING, not just switched on in
+	 * the options. The drop-in only runs when WP_CACHE is true AND our
+	 * advanced-cache.php is in place; if wp-config.php could not be written (e.g.
+	 * not writable), the option can be on while nothing is served. The dashboard
+	 * must reflect that instead of claiming "Enabled".
+	 *
+	 * @return bool
+	 */
+	public static function is_active() {
+		return self::is_enabled()
+			&& defined( 'WP_CACHE' ) && WP_CACHE
+			&& self::dropin_is_ours();
+	}
+
+	/**
+	 * Real activation state for the UI: 'disabled' | 'pending' | 'active', plus
+	 * the reason it is only pending so the admin knows exactly what is missing.
+	 *
+	 * @return array { state: string, wp_cache: bool, dropin: bool, reason: string }
+	 */
+	public static function activation_state() {
+		if ( ! self::is_enabled() ) {
+			return array( 'state' => 'disabled', 'wp_cache' => false, 'dropin' => false, 'reason' => '' );
+		}
+		$wp_cache = defined( 'WP_CACHE' ) && WP_CACHE;
+		$dropin   = self::dropin_is_ours();
+		if ( $wp_cache && $dropin ) {
+			return array( 'state' => 'active', 'wp_cache' => true, 'dropin' => true, 'reason' => '' );
+		}
+		if ( ! $wp_cache ) {
+			$reason = __( "WP_CACHE is not set in wp-config.php, so WordPress never loads the cache. Add near the top: define('WP_CACHE', true);", 'flavor-edge-cache' );
+		} else {
+			$reason = __( 'The advanced-cache.php drop-in is missing. Toggle the page cache off and on to rewrite it.', 'flavor-edge-cache' );
+		}
+		return array( 'state' => 'pending', 'wp_cache' => $wp_cache, 'dropin' => $dropin, 'reason' => $reason );
 	}
 
 	// -------------------------------------------------------------------------

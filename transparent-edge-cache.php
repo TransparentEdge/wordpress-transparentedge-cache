@@ -87,6 +87,9 @@ function flavor_edge_init() {
 		}
 	}
 
+	// One-time cache-fragmentation migration (Vary: X-Device / Accept-Language).
+	flavor_edge_migrate_vary();
+
 	// Boot the core.
 	\flavor_edge\TE_Core::instance();
 
@@ -94,6 +97,70 @@ function flavor_edge_init() {
 	\flavor_edge\TE_Api::schedule_health_check();
 }
 add_action( 'plugins_loaded', 'flavor_edge_init' );
+
+/**
+ * One-time migration: turn OFF Vary: X-Device and Vary: Accept-Language on
+ * existing installs.
+ *
+ * Both used to be on by default (vary_device) or auto-enabled by the mere
+ * presence of WPML/Polylang (vary_language), but the plugin serves the same
+ * anonymous HTML to every device, and WPML/Polylang carry the language in the
+ * URL — so these only fragmented the edge cache into one object per device
+ * bucket and per Accept-Language string, hurting the hit ratio for nothing.
+ *
+ * Runs once (guarded by its own flag, independent of the version number), and
+ * leaves a dismissible notice so an admin who genuinely serves per-device or
+ * per-language HTML on the same URL knows how to switch them back on.
+ */
+function flavor_edge_migrate_vary() {
+	if ( get_option( 'flavor_edge_vary_migrated' ) ) {
+		return;
+	}
+	$settings = get_option( 'flavor_edge_settings', array() );
+	// Nothing stored yet → a fresh install already gets the correct defaults.
+	if ( ! is_array( $settings ) || empty( $settings ) ) {
+		update_option( 'flavor_edge_vary_migrated', 1 );
+		return;
+	}
+	$changed = false;
+	if ( ! empty( $settings['vary_device'] ) ) {
+		$settings['vary_device'] = false;
+		$changed = true;
+	}
+	if ( ! empty( $settings['vary_language'] ) ) {
+		$settings['vary_language'] = false;
+		$changed = true;
+	}
+	if ( $changed ) {
+		update_option( 'flavor_edge_settings', $settings );
+		update_option( 'flavor_edge_vary_migration_notice', 1 );
+	}
+	update_option( 'flavor_edge_vary_migrated', 1 );
+}
+
+/**
+ * Admin notice explaining the one-time Vary migration.
+ */
+function flavor_edge_vary_migration_notice() {
+	if ( ! get_option( 'flavor_edge_vary_migration_notice' ) ) {
+		return;
+	}
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+	$screen = get_current_screen();
+	if ( ! $screen || ! in_array( $screen->id, array( 'toplevel_page_flavor-edge-cache', 'dashboard', 'plugins' ), true ) ) {
+		return;
+	}
+	printf(
+		'<div class="notice notice-info is-dismissible"><p><strong>%s</strong></p><p>%s</p></div>',
+		esc_html__( 'Transparent Edge Cache — cache fragmentation fixed', 'flavor-edge-cache' ),
+		esc_html__( 'This update turned off Vary: X-Device and Vary: Accept-Language, which were splitting your edge cache into extra copies without serving different content (they were hurting your hit ratio). If your site genuinely serves different HTML for the same URL per device or per browser language, you can switch them back on under TE Cache → Cache.', 'flavor-edge-cache' )
+	);
+	// Show once.
+	delete_option( 'flavor_edge_vary_migration_notice' );
+}
+add_action( 'admin_notices', 'flavor_edge_vary_migration_notice' );
 
 /**
  * Register custom cron schedule (30 minutes).
