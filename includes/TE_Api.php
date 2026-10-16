@@ -231,19 +231,83 @@ class TE_Api {
 			);
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
-		$type = $soft ? 'soft_purge' : 'purge';
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		// 206 = partial (some URLs invalid, Warning: 199) — still a success for
+		// the ones that went through, and must not trip the circuit breaker.
+		$ok          = ( 200 === $code || 206 === $code );
+		$retry_after = (int) wp_remote_retrieve_header( $response, 'retry-after' );
 
-		if ( 200 !== $code ) {
-			self::record_failure( 'purge_urls_http_' . $code );
-		} else {
+		if ( $ok ) {
 			self::record_success();
+		} else {
+			self::record_failure( 'purge_urls_http_' . $code );
 		}
 
 		return array(
-			'success'   => 200 === $code,
-			'message'   => 200 === $code ? 'Purge successful' : 'Purge failed (HTTP ' . $code . ')',
-			'urls_sent' => count( $valid_urls ),
+			'success'     => $ok,
+			'message'     => $ok ? 'Purge successful' : 'Purge failed (HTTP ' . $code . ')',
+			'urls_sent'   => count( $valid_urls ),
+			'status'      => $code,
+			'retry_after' => $retry_after,
+		);
+	}
+
+	/**
+	 * Prefetch (warm) URLs across the whole edge via the platform CacheWarmUp
+	 * service: POST /v1/companies/{id}/prefetch/ with { urls: [...] }.
+	 *
+	 * NOTE on origin load: prefetch fans out roughly one origin fetch per edge
+	 * node per URL (measured ~1/node, no refetcher aggregation). It warms every
+	 * node, but the caller MUST throttle it (small batches, pause, health gate)
+	 * so a bulk warm — e.g. a whole sitemap — never stampedes a weak origin.
+	 * For re-warming content that was just invalidated, prefer purge_urls(...,
+	 * refetch:true), whose refetchers aggregate (origin sees ~1-2 total).
+	 *
+	 * @param array $urls Array of full URLs to prefetch (keep the batch small).
+	 * @return array { success: bool, message: string, status: int, urls_sent: int, retry_after: int }
+	 */
+	public static function prefetch( $urls ) {
+		$token = self::get_token();
+		if ( ! $token ) {
+			return array( 'success' => false, 'message' => 'No valid API token', 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+		}
+
+		$company_id = self::get_credential( 'company_id' );
+		if ( empty( $company_id ) ) {
+			return array( 'success' => false, 'message' => 'Company ID not configured', 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+		}
+
+		$valid_urls = array_values( array_unique( array_filter( (array) $urls, function ( $url ) {
+			return filter_var( $url, FILTER_VALIDATE_URL );
+		} ) ) );
+		if ( empty( $valid_urls ) ) {
+			return array( 'success' => false, 'message' => 'No valid URLs to prefetch', 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+		}
+
+		$endpoint = sprintf( '%s/v1/companies/%s/prefetch/', FLAVOR_EDGE_API_BASE, $company_id );
+		$response = self::api_post( $endpoint, array( 'urls' => $valid_urls ) );
+
+		if ( is_wp_error( $response ) ) {
+			self::record_failure( 'prefetch: ' . $response->get_error_message() );
+			return array( 'success' => false, 'message' => $response->get_error_message(), 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		// 429/503 → the platform is rate-limiting us; surface Retry-After so the
+		// caller can back off instead of hammering.
+		$retry_after = (int) wp_remote_retrieve_header( $response, 'retry-after' );
+		if ( 200 === $code || 206 === $code ) {
+			self::record_success();
+		} else {
+			self::record_failure( 'prefetch_http_' . $code );
+		}
+
+		return array(
+			'success'     => ( 200 === $code || 206 === $code ),
+			'message'     => ( 200 === $code || 206 === $code ) ? 'Prefetch queued' : 'Prefetch failed (HTTP ' . $code . ')',
+			'status'      => $code,
+			'urls_sent'   => count( $valid_urls ),
+			'retry_after' => $retry_after,
 		);
 	}
 

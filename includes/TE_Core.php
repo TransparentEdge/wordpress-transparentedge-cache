@@ -217,6 +217,9 @@ class TE_Core {
 		switch ( $action ) {
 			case 'purge_all':
 				$result = TE_Api::purge_all();
+				// Also flush the origin page cache and kick the preload (same hook
+				// the automatic full purge fires). See TE_Admin::ajax_purge_all.
+				do_action( 'flavor_edge_after_purge_all', $result );
 				$msg    = $result['success']
 					? __( 'All cache purged successfully.', 'flavor-edge-cache' )
 					: __( 'Purge failed: ', 'flavor-edge-cache' ) . $result['message'];

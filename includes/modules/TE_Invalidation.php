@@ -511,25 +511,33 @@ class TE_Invalidation {
 	}
 
 	/**
-	 * Warm up Varnish cache for purged URLs.
+	 * Warm up the cache for purged URLs.
 	 *
-	 * Queues the resolved URLs and schedules an asynchronous processor (WP-Cron)
-	 * that sends GET requests so Varnish fetches a fresh copy from origin and
-	 * caches it. The warm-up never runs in the editor's request, so it adds no
-	 * latency to save/publish.
+	 * Preferred path — platform refetch (warmup_method = 'refetch', default):
+	 * a single invalidate call with refetch:true. The invalidation message fans
+	 * out over RabbitMQ to EVERY edge node, so all nodes re-warm; the actual
+	 * origin fetches are delegated to the shared refetcher nodes, which aggregate
+	 * them (origin sees ~1-2 instead of one per node). It is general and
+	 * origin-safe at once, and it needs no midtier. This is strictly better than
+	 * an origin-side GET, which only warms the single node that serves the
+	 * WordPress server's egress and leaves the rest of the network cold. One
+	 * light API call, so it runs inline at shutdown like the purge itself.
 	 *
-	 * Origin protection (see process_warmup_queue):
-	 * - Max 20 URLs per event (filter: flavor_edge_max_warmup_urls).
-	 * - Sequential, blocking requests in batches (default 5) with a pause
-	 *   between batches (filters: flavor_edge_warmup_batch_size,
-	 *   flavor_edge_warmup_batch_pause_us, flavor_edge_warmup_request_timeout).
-	 * - A concurrency lock prevents overlapping warm-up runs from stampeding
-	 *   the origin when several posts are republished at once.
+	 * Fallback path — origin GET (warmup_method = 'http', or when the platform
+	 * API is unavailable / the circuit breaker is open, or the refetch call
+	 * fails): the URLs are queued and warmed off the save request by
+	 * process_warmup_queue(), with the origin protections documented there
+	 * (max 20 URLs, paced batches, concurrency lock).
 	 */
 	private static function do_warmup() {
-		$urls = array_unique( array_filter( self::$warmup_urls, function ( $url ) {
-			return filter_var( $url, FILTER_VALIDATE_URL );
-		} ) );
+		// Canonicalise first: warm the clean page URL, never a query-string or
+		// fragment variant. WPML and other plugins can decorate home_url() /
+		// get_permalink() during a save request (e.g. ?translation_priority=...),
+		// which would otherwise fragment the warm into several cache objects for
+		// the same page. Drop the query and fragment, and normalise an empty path
+		// to "/" so "https://site" and "https://site/" collapse into one.
+		$urls = array_filter( array_map( array( __CLASS__, 'canonical_warmup_url' ), self::$warmup_urls ) );
+		$urls = array_values( array_unique( $urls ) );
 
 		if ( empty( $urls ) ) {
 			return;
@@ -538,8 +546,20 @@ class TE_Invalidation {
 		$max = apply_filters( 'flavor_edge_max_warmup_urls', self::MAX_WARMUP_URLS );
 		$urls = array_slice( array_values( $urls ), 0, $max );
 
-		// Schedule the warm-up to run just after this request completes.
-		// This avoids adding latency to the user's save/publish action.
+		// Preferred: platform refetch (general + origin-aggregated). Skip it only
+		// when the admin pinned the HTTP method or the API is currently down.
+		$method = TE_Settings::get( 'warmup_method' );
+		if ( 'http' !== $method && ! TE_Api::is_circuit_open() ) {
+			$result = TE_Api::purge_urls( $urls, true, true );
+			if ( ! empty( $result['success'] ) ) {
+				return;
+			}
+			// Refetch failed though the circuit was closed — fall through to the
+			// origin GET so the content still gets warmed somewhere.
+		}
+
+		// Fallback: queue the origin-GET warm to run just after this request
+		// completes, so it never adds latency to the editor's save/publish.
 		$existing = get_option( 'flavor_edge_warmup_queue', array() );
 		$merged   = array_unique( array_merge( $existing, $urls ) );
 		$merged   = array_slice( $merged, 0, $max );
@@ -548,6 +568,28 @@ class TE_Invalidation {
 		if ( ! wp_next_scheduled( 'flavor_edge_warmup_process' ) ) {
 			wp_schedule_single_event( time() + 1, 'flavor_edge_warmup_process' );
 		}
+	}
+
+	/**
+	 * Reduce a warm-up URL to the canonical page URL we actually want cached:
+	 * same scheme/host/path, no query string, no fragment, and never an empty
+	 * path. Returns '' for anything that is not a valid URL.
+	 *
+	 * @param string $url Raw warm-up URL.
+	 * @return string Canonical URL, or '' to drop it.
+	 */
+	private static function canonical_warmup_url( $url ) {
+		if ( ! is_string( $url ) || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+			return '';
+		}
+		$p = wp_parse_url( $url );
+		if ( empty( $p['host'] ) ) {
+			return '';
+		}
+		$scheme = ! empty( $p['scheme'] ) ? $p['scheme'] : 'https';
+		$path   = isset( $p['path'] ) && '' !== $p['path'] ? $p['path'] : '/';
+		$port   = ! empty( $p['port'] ) ? ':' . $p['port'] : '';
+		return $scheme . '://' . $p['host'] . $port . $path;
 	}
 
 	/**

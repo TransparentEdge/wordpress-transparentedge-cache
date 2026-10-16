@@ -536,6 +536,16 @@ defined( 'ABSPATH' ) || exit;
 					<td><label><input type="checkbox" name="refetch_enabled" value="1" <?php checked( $settings['refetch_enabled'] ); ?> /> <?php esc_html_e( 'Warm up cache immediately after invalidation (no cold MISSes)', 'flavor-edge-cache' ); ?></label></td>
 				</tr>
 				<tr>
+					<th><?php esc_html_e( 'Warm method', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<select name="warmup_method">
+							<option value="refetch" <?php selected( $settings['warmup_method'], 'refetch' ); ?>><?php esc_html_e( 'Platform refetch (recommended — warms every edge node, origin-safe)', 'flavor-edge-cache' ); ?></option>
+							<option value="http" <?php selected( $settings['warmup_method'], 'http' ); ?>><?php esc_html_e( 'Origin GET (fallback — only warms one node)', 'flavor-edge-cache' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Refetch re-warms the changed URLs on the whole edge in one call; the platform refetchers aggregate the origin fetches, so your origin sees one or two requests instead of one per node. It needs no MidTier. The origin GET is used automatically as a fallback when the API is unavailable.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th colspan="2"><h3 style="margin:0"><?php esc_html_e( 'Purge triggers', 'flavor-edge-cache' ); ?></h3></th>
 				</tr>
 				<tr>
@@ -567,7 +577,39 @@ defined( 'ABSPATH' ) || exit;
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Preload via Sitemap', 'flavor-edge-cache' ); ?></th>
-					<td><label><input type="checkbox" name="preload_sitemap" value="1" <?php checked( $settings['preload_sitemap'] ); ?> /> <?php esc_html_e( 'Crawl sitemap.xml after a full purge to warm the CDN cache (no cold MISSes)', 'flavor-edge-cache' ); ?></label></td>
+					<td>
+						<label><input type="checkbox" name="preload_sitemap" value="1" <?php checked( $settings['preload_sitemap'] ); ?> /> <?php esc_html_e( 'Crawl the sitemap after a full purge to warm the CDN cache (no cold MISSes)', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'A bulk warm of the whole site. It is throttled and gated so it never overloads the origin — see the controls below.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Preload method', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<select name="preload_method">
+							<option value="refetch" <?php selected( $settings['preload_method'], 'refetch' ); ?>><?php esc_html_e( 'Refetch (recommended — origin-aggregated, safe for weak origins)', 'flavor-edge-cache' ); ?></option>
+							<option value="prefetch" <?php selected( $settings['preload_method'], 'prefetch' ); ?>><?php esc_html_e( 'Prefetch (populates without evicting, but fans out ~1 fetch per node — strong origins only)', 'flavor-edge-cache' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Refetch collapses the origin fetches through the refetcher nodes (origin sees one or two per URL). Prefetch warms every node directly, so each node fetches from the origin — only choose it if your origin can take one request per edge node per URL.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Origin health gate', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="preload_health_gate" value="1" <?php checked( $settings['preload_health_gate'] ); ?> /> <?php esc_html_e( 'Probe the origin before each batch and pause the preload if it is slow or erroring', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'This toggle governs the manual preload. The automatic preload after a full purge is always gated, whatever this is set to, so a scheduled warm never overloads the origin unattended.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Off-peak only', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="preload_offpeak" value="1" <?php checked( $settings['preload_offpeak'] ); ?> /> <?php esc_html_e( 'Run the bulk preload only during an off-peak window', 'flavor-edge-cache' ); ?></label>
+						<p class="description">
+							<?php esc_html_e( 'Window (site time, 24h):', 'flavor-edge-cache' ); ?>
+							<input type="number" name="preload_offpeak_start" min="0" max="23" style="width:4em" value="<?php echo esc_attr( $settings['preload_offpeak_start'] ); ?>" />
+							&ndash;
+							<input type="number" name="preload_offpeak_end" min="0" max="23" style="width:4em" value="<?php echo esc_attr( $settings['preload_offpeak_end'] ); ?>" />
+						</p>
+					</td>
 				</tr>
 			</table>
 		</div>

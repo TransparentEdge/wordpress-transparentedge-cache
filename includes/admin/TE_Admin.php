@@ -278,7 +278,7 @@ class TE_Admin {
 			'minify_html', 'minify_css', 'minify_js', 'combine_css', 'combine_js', 'delay_js', 'defer_js',
 			'lazyload_images', 'lazyload_iframes', 'preload_lcp', 'selfhost_google_fonts',
 			'woo_exclude_cart', 'woo_exclude_checkout', 'woo_exclude_account', 'woo_purge_stock',
-			'preload_sitemap',
+			'preload_sitemap', 'preload_health_gate', 'preload_offpeak',
 			'heartbeat_disable_admin', 'heartbeat_disable_editor',
 			'debug_mode',
 			'speculation_enabled',
@@ -304,12 +304,30 @@ class TE_Admin {
 			'i3_quality_jpeg', 'i3_quality_webp', 'i3_s_maxage', 'i3_max_age',
 			'debounce_seconds', 'heartbeat_interval',
 			'harden_login_max_attempts', 'sec_header_hsts_maxage',
+			'preload_offpeak_start', 'preload_offpeak_end',
 		);
 
 		foreach ( $numbers as $key ) {
 			if ( isset( $raw[ $key ] ) ) {
 				$settings[ $key ] = absint( $raw[ $key ] );
 			}
+		}
+
+		// Clamp off-peak window hours to 0-23.
+		foreach ( array( 'preload_offpeak_start', 'preload_offpeak_end' ) as $hk ) {
+			$settings[ $hk ] = max( 0, min( 23, (int) $settings[ $hk ] ) );
+		}
+
+		// Warm method (republish): refetch (platform, default) or http (origin GET fallback).
+		if ( isset( $raw['warmup_method'] ) ) {
+			$settings['warmup_method'] = in_array( $raw['warmup_method'], array( 'refetch', 'http' ), true )
+				? $raw['warmup_method'] : 'refetch';
+		}
+
+		// Preload method (bulk sitemap): refetch (default, origin-safe) or prefetch (fans out).
+		if ( isset( $raw['preload_method'] ) ) {
+			$settings['preload_method'] = in_array( $raw['preload_method'], array( 'refetch', 'prefetch' ), true )
+				? $raw['preload_method'] : 'refetch';
 		}
 
 		// Front-page cache override (checkbox).
@@ -403,6 +421,15 @@ class TE_Admin {
 		}
 
 		$result = TE_Api::purge_all();
+
+		// Fire the same hook the automatic full purge fires (TE_Invalidation::
+		// flush_queue), so the manual "Purge All" button also flushes the origin
+		// page cache (TE_PageCache::flush_all) and kicks the sitemap preload
+		// (TE_Preload::on_purge_all). Without this the edge was cleared but the
+		// origin page cache kept serving stale HTML until its TTL expired, and no
+		// warm-up ran. The automatic path still fires this once, in flush_queue.
+		do_action( 'flavor_edge_after_purge_all', $result );
+
 		wp_send_json( $result );
 	}
 

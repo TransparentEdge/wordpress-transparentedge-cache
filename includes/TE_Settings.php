@@ -68,7 +68,8 @@ class TE_Settings {
 			// Invalidation module.
 			'invalidation_enabled'  => true,
 			'invalidation_method'   => 'soft',   // 'soft' (default) or 'hard'.
-			'refetch_enabled'       => true,
+			'refetch_enabled'       => true,     // Master switch: warm the cache after an automated purge.
+			'warmup_method'         => 'refetch', // How to warm: 'refetch' (platform, all nodes, origin-aggregated — default) or 'http' (origin-side GET fallback).
 			'purge_on_post'         => true,
 			'purge_on_comment'      => true,
 			'purge_on_menu'         => true,
@@ -103,8 +104,13 @@ class TE_Settings {
 			'selfhost_google_fonts' => false,
 			'dns_prefetch_urls'     => '',
 
-			// Preload.
-			'preload_sitemap'       => true,      // Warm Varnish after full purge via sitemap.
+			// Preload (bulk sitemap warm after a full purge).
+			'preload_sitemap'       => true,      // Opt-in: warm the whole sitemap after a full purge.
+			'preload_method'        => 'refetch', // 'refetch' (evict+repopulate, origin-aggregated — default, origin-safe) or 'prefetch' (populate without evicting, but fans out ~1 origin fetch/node — only for strong origins).
+			'preload_health_gate'   => true,      // Probe origin health before each batch; pause and back off if the origin is slow or erroring.
+			'preload_offpeak'       => false,     // Restrict bulk preload to an off-peak window (site timezone).
+			'preload_offpeak_start' => 1,         // Off-peak window start hour (0-23).
+			'preload_offpeak_end'   => 6,         // Off-peak window end hour (0-23).
 
 			// WooCommerce.
 			'woo_exclude_cart'      => true,

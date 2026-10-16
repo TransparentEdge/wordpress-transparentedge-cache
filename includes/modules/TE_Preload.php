@@ -2,13 +2,16 @@
 /**
  * Sitemap Preload module.
  *
- * Crawls sitemap.xml to warm Varnish cache after a full purge.
- * Uses a background queue with rate limiting to avoid overloading the origin.
+ * Crawls the sitemap to warm the cache after a full purge, warming each batch
+ * with a single aggregated platform call (refetch by default) so the whole
+ * edge re-warms without a per-node stampede on the origin.
  *
  * Architecture:
  * - AJAX start() queues URLs and returns immediately.
  * - Admin JS polls ajax_tick() every 3 seconds.
- * - Each tick processes a small batch (3 URLs) with rate limiting.
+ * - Each tick processes a small batch via one platform warm call.
+ * - Origin protection: off-peak window (optional), live origin-health gate,
+ *   and exponential backoff (honouring Retry-After) on platform rate limits.
  * - WP Cron runs as fallback if admin closes the page.
  * - Can be stopped at any time.
  *
@@ -45,16 +48,21 @@ class TE_Preload {
 			return;
 		}
 		if ( isset( $result['success'] ) && $result['success'] ) {
-			self::start();
+			// Unattended: triggered by the system after a full purge with nobody
+			// watching. The origin-health gate is forced on for this path so a
+			// scheduled/automatic bulk warm can never topple a weak origin.
+			self::start( true );
 		}
 	}
 
 	/**
 	 * Queue URLs from sitemap and return immediately.
 	 *
+	 * @param bool $unattended True when started automatically (no admin
+	 *                         watching) — forces the origin-health gate on.
 	 * @return array
 	 */
-	public static function start() {
+	public static function start( $unattended = false ) {
 		$urls = self::get_urls_from_sitemap();
 
 		if ( empty( $urls ) ) {
@@ -66,13 +74,17 @@ class TE_Preload {
 		}
 
 		$status = array(
-			'total'      => count( $urls ),
-			'remaining'  => $urls,
-			'processed'  => 0,
-			'errors'     => 0,
-			'started'    => time(),
-			'last_batch' => 0,
-			'status'     => 'running',
+			'total'       => count( $urls ),
+			'remaining'   => $urls,
+			'processed'   => 0,
+			'errors'      => 0,
+			'started'     => time(),
+			'last_batch'  => 0,
+			'status'      => 'running',
+			'backoff'     => 0,
+			'retry_after' => 0,
+			'waiting'     => '',
+			'unattended'  => (bool) $unattended,
 		);
 
 		update_option( self::STATUS_KEY, $status, false );
@@ -105,6 +117,28 @@ class TE_Preload {
 	}
 
 	/**
+	 * Persist batch progress without clobbering a stop/complete that landed
+	 * concurrently. The AJAX tick writes the status at the end of each batch; if
+	 * the user hits Stop while a tick is in flight, that tick must not overwrite
+	 * the 'stopped' state with a stale 'running' (which previously left an
+	 * orphaned preload — status running but no scheduled event).
+	 *
+	 * @param array $status In-memory status after a batch.
+	 * @return array The status actually in effect.
+	 */
+	private static function persist_progress( $status ) {
+		$current = get_option( self::STATUS_KEY, null );
+		if ( is_array( $current ) && isset( $current['status'] )
+			&& in_array( $current['status'], array( 'stopped', 'completed' ), true )
+			&& 'running' === ( isset( $status['status'] ) ? $status['status'] : '' ) ) {
+			// A stop/complete won the race — honour it, drop this batch's write.
+			return $current;
+		}
+		update_option( self::STATUS_KEY, $status, false );
+		return $status;
+	}
+
+	/**
 	 * AJAX tick — called by admin JS polling every 3s.
 	 * Processes one batch if rate limit allows, returns current status.
 	 */
@@ -122,19 +156,19 @@ class TE_Preload {
 			return;
 		}
 
-		// Rate limit: skip if too soon since last batch.
-		if ( ( time() - $status['last_batch'] ) < self::BATCH_DELAY ) {
+		// Rate limit / backoff: skip if too soon since last batch.
+		if ( ( time() - $status['last_batch'] ) < self::next_delay( $status ) ) {
 			wp_send_json_success( $status );
 			return;
 		}
 
 		// Process one batch.
 		$status = self::do_batch( $status );
-		update_option( self::STATUS_KEY, $status, false );
+		$status = self::persist_progress( $status );
 
 		// Keep cron scheduled as fallback.
 		if ( 'running' === $status['status'] && ! wp_next_scheduled( 'flavor_edge_preload_batch' ) ) {
-			wp_schedule_single_event( time() + self::BATCH_DELAY + 1, 'flavor_edge_preload_batch' );
+			wp_schedule_single_event( time() + self::next_delay( $status ) + 1, 'flavor_edge_preload_batch' );
 		}
 
 		wp_send_json_success( $status );
@@ -151,38 +185,73 @@ class TE_Preload {
 		}
 
 		$status = self::do_batch( $status );
-		update_option( self::STATUS_KEY, $status, false );
+		$status = self::persist_progress( $status );
 
 		if ( 'running' === $status['status'] && ! empty( $status['remaining'] ) ) {
-			wp_schedule_single_event( time() + self::BATCH_DELAY + 1, 'flavor_edge_preload_batch' );
+			wp_schedule_single_event( time() + self::next_delay( $status ) + 1, 'flavor_edge_preload_batch' );
 		}
 	}
 
 	/**
-	 * Process one batch of URLs (sequential, rate-limited).
+	 * Process one batch of URLs.
+	 *
+	 * The batch is warmed with a SINGLE platform call (not one origin GET per
+	 * URL): by default an aggregated refetch, so every edge node re-warms while
+	 * the refetchers collapse the origin fetches (origin sees ~1-2 per URL
+	 * instead of one per node). Before each batch we gate on an off-peak window
+	 * (optional) and on live origin health, and we back off on platform rate
+	 * limits — so a bulk warm never stampedes a weak origin.
 	 *
 	 * @param array $status Current status.
 	 * @return array Updated status.
 	 */
 	private static function do_batch( $status ) {
-		$batch = array_splice( $status['remaining'], 0, self::BATCH_SIZE );
-
-		foreach ( $batch as $url ) {
-			$response = wp_remote_get( $url, array(
-				'timeout'     => 5,
-				'blocking'    => true,
-				'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
-				'redirection' => 0,
-				'headers'     => array( 'Accept' => 'text/html,image/webp,*/*' ),
-			) );
-
-			$status['processed']++;
-			if ( is_wp_error( $response ) ) {
-				$status['errors']++;
-			}
+		// Off-peak gate: outside the configured window, wait without sending.
+		if ( ! self::within_offpeak_window() ) {
+			$status['last_batch'] = time();
+			$status['waiting']    = 'offpeak';
+			return $status;
 		}
 
-		$status['last_batch'] = time();
+		// Origin-health gate: don't add warm load to a struggling origin. Applies
+		// to both the manual and the automatic path (both run through here); for
+		// an unattended run it is forced on even if the toggle is off, so a
+		// scheduled warm can never topple the origin with nobody watching.
+		$health_gate = TE_Settings::get( 'preload_health_gate' ) || ! empty( $status['unattended'] );
+		if ( $health_gate && ! self::origin_is_healthy() ) {
+			$status['last_batch'] = time();
+			$status['backoff']    = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
+			$status['waiting']    = 'origin_unhealthy';
+			return $status;
+		}
+
+		$batch = array_splice( $status['remaining'], 0, self::BATCH_SIZE );
+
+		// One platform call warms the whole batch across all nodes.
+		$method = TE_Settings::get( 'preload_method' );
+		if ( 'prefetch' === $method ) {
+			$result = TE_Api::prefetch( $batch );
+		} else {
+			$result = TE_Api::purge_urls( $batch, true, true ); // soft purge + aggregated refetch.
+		}
+
+		$status['processed'] += count( $batch );
+		$status['last_batch']  = time();
+		$status['waiting']     = '';
+
+		if ( empty( $result['success'] ) ) {
+			$status['errors'] += count( $batch );
+			$code = (int) ( isset( $result['status'] ) ? $result['status'] : 0 );
+			// Rate limited / platform busy → requeue the batch and back off.
+			if ( 429 === $code || 503 === $code ) {
+				$status['backoff']     = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
+				$status['retry_after'] = (int) ( isset( $result['retry_after'] ) ? $result['retry_after'] : 0 );
+				$status['remaining']   = array_merge( $batch, $status['remaining'] );
+			}
+		} else {
+			$status['backoff']     = 0;
+			$status['retry_after'] = 0;
+		}
 
 		if ( empty( $status['remaining'] ) ) {
 			$status['status']   = 'completed';
@@ -192,6 +261,101 @@ class TE_Preload {
 		}
 
 		return $status;
+	}
+
+	/**
+	 * Delay before the next batch, honouring backoff and gate waits.
+	 *
+	 * @param array $status Current status.
+	 * @return int Seconds.
+	 */
+	private static function next_delay( $status ) {
+		// While gated (off-peak / unhealthy origin) re-check at a slow cadence.
+		if ( ! empty( $status['waiting'] ) ) {
+			return (int) apply_filters( 'flavor_edge_preload_wait_delay', 120 );
+		}
+		$backoff = (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 );
+		if ( $backoff > 0 ) {
+			$ra  = (int) ( isset( $status['retry_after'] ) ? $status['retry_after'] : 0 );
+			$exp = self::BATCH_DELAY * (int) pow( 2, $backoff );
+			return (int) min( max( $exp, $ra ), 300 ); // cap at 5 min.
+		}
+		return self::BATCH_DELAY;
+	}
+
+	/**
+	 * Is the current time inside the configured off-peak window?
+	 * Returns true (no restriction) when off-peak mode is disabled.
+	 *
+	 * @return bool
+	 */
+	private static function within_offpeak_window() {
+		if ( ! TE_Settings::get( 'preload_offpeak' ) ) {
+			return true;
+		}
+		$start = (int) TE_Settings::get( 'preload_offpeak_start' );
+		$end   = (int) TE_Settings::get( 'preload_offpeak_end' );
+		if ( $start === $end ) {
+			return true; // empty/degenerate window → no restriction.
+		}
+		$hour = (int) current_time( 'G' ); // site timezone, 0-23.
+		if ( $start < $end ) {
+			return ( $hour >= $start && $hour < $end );
+		}
+		// Window wraps midnight (e.g. 22 → 6).
+		return ( $hour >= $start || $hour < $end );
+	}
+
+	/**
+	 * Probe live origin health before piling warm work on it.
+	 *
+	 * Best-effort: hits our own host with a unique-query, no-cache request so it
+	 * reaches the origin (not an edge HIT), and measures status and latency.
+	 * Unhealthy = 5xx / unreachable, or slower than the threshold.
+	 *
+	 * Caveat: a site whose VCL normalises away unknown query strings would turn
+	 * this into an edge HIT (measuring the edge, not the origin). For those
+	 * sites, point the probe at a guaranteed-pass URL with the
+	 * flavor_edge_preload_health_url filter. The probe is an extra guard on top
+	 * of the real origin protection (refetch aggregation + paced batches +
+	 * backoff on rate limits), which does not depend on it.
+	 *
+	 * @return bool
+	 */
+	private static function origin_is_healthy() {
+		$probe_url = apply_filters(
+			'flavor_edge_preload_health_url',
+			add_query_arg( 'flavor_edge_health', (string) time(), home_url( '/' ) )
+		);
+		$timeout   = (int) apply_filters( 'flavor_edge_preload_health_timeout', 4 );
+
+		$start = microtime( true );
+		$resp  = wp_remote_get( $probe_url, array(
+			'timeout'     => $timeout,
+			'blocking'    => true,
+			'redirection' => 0,
+			'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
+			'headers'     => array(
+				'Accept'        => 'text/html,*/*',
+				'Cache-Control' => 'no-cache', // bypass the edge so we measure the origin.
+			),
+		) );
+
+		if ( is_wp_error( $resp ) ) {
+			return false;
+		}
+
+		$elapsed     = microtime( true ) - $start;
+		$code        = (int) wp_remote_retrieve_response_code( $resp );
+		$max_latency = (float) apply_filters( 'flavor_edge_preload_health_max_latency', 2.5 );
+
+		if ( 0 === $code || $code >= 500 ) {
+			return false;
+		}
+		if ( $elapsed > $max_latency ) {
+			return false;
+		}
+		return true;
 	}
 
 	/**

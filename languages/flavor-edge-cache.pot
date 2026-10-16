@@ -1,7 +1,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.6.0\n"
+"Project-Id-Version: Transparent Edge Cache 1.7.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-15 09:56+0000\n"
 "Language: \n"
@@ -319,10 +319,6 @@ msgstr ""
 
 msgid ""
 "Could not write object-cache.php. Check file permissions on wp-content/."
-msgstr ""
-
-msgid ""
-"Crawl sitemap.xml after a full purge to warm the CDN cache (no cold MISSes)"
 msgstr ""
 
 msgid "Dashboard"
@@ -1468,4 +1464,70 @@ msgid ""
 msgstr ""
 
 msgid "Transparent Edge Cache — cache fragmentation fixed"
+msgstr ""
+
+msgid ""
+"A bulk warm of the whole site. It is throttled and gated so it never "
+"overloads the origin — see the controls below."
+msgstr ""
+
+msgid ""
+"Crawl the sitemap after a full purge to warm the CDN cache (no cold MISSes)"
+msgstr ""
+
+msgid "Off-peak only"
+msgstr ""
+
+msgid "Origin GET (fallback — only warms one node)"
+msgstr ""
+
+msgid "Origin health gate"
+msgstr ""
+
+msgid "Platform refetch (recommended — warms every edge node, origin-safe)"
+msgstr ""
+
+msgid ""
+"Prefetch (populates without evicting, but fans out ~1 fetch per node — "
+"strong origins only)"
+msgstr ""
+
+msgid "Preload method"
+msgstr ""
+
+msgid ""
+"Probe the origin before each batch and pause the preload if it is slow or "
+"erroring"
+msgstr ""
+
+msgid "Refetch (recommended — origin-aggregated, safe for weak origins)"
+msgstr ""
+
+msgid ""
+"Refetch collapses the origin fetches through the refetcher nodes (origin "
+"sees one or two per URL). Prefetch warms every node directly, so each node "
+"fetches from the origin — only choose it if your origin can take one request"
+" per edge node per URL."
+msgstr ""
+
+msgid ""
+"Refetch re-warms the changed URLs on the whole edge in one call; the "
+"platform refetchers aggregate the origin fetches, so your origin sees one or"
+" two requests instead of one per node. It needs no MidTier. The origin GET "
+"is used automatically as a fallback when the API is unavailable."
+msgstr ""
+
+msgid "Run the bulk preload only during an off-peak window"
+msgstr ""
+
+msgid "Warm method"
+msgstr ""
+
+msgid "Window (site time, 24h):"
+msgstr ""
+
+msgid ""
+"This toggle governs the manual preload. The automatic preload after a full "
+"purge is always gated, whatever this is set to, so a scheduled warm never "
+"overloads the origin unattended."
 msgstr ""

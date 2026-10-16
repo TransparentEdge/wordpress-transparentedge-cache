@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -49,6 +49,13 @@ Transparent Edge Cache is the official WordPress plugin for the [Transparent Edg
 3. Complete the Setup Wizard or enter credentials manually
 
 == Changelog ==
+
+= 1.7.0 =
+* NEW (origin-safe warm-up): after a post is republished, the changed URLs are now re-warmed with a platform refetch instead of an origin-side GET. One call re-warms the URL on every edge node (the invalidation fans out to all nodes), while the shared refetcher nodes aggregate the origin fetches — the origin sees one or two requests instead of one per node — and it needs no MidTier. The origin GET is kept as an automatic fallback for when the platform API is unavailable (selectable under TE Cache → Cache → Warm method).
+* NEW (sitemap preload, origin protection): the bulk sitemap warm no longer sends one origin GET per URL. Each batch is warmed with a single aggregated refetch, and the preload is gated so it cannot overload a weak origin — a live origin-health probe pauses it when the origin is slow or erroring, an optional off-peak window restricts it to quiet hours, and it backs off exponentially (honouring Retry-After) if the platform rate-limits. An advanced "prefetch" method is available for strong origins (populates without evicting, but fans out one fetch per node).
+* NEW: TE_Api::prefetch() wraps the platform /prefetch/ endpoint; purge_urls() now reports the HTTP status and Retry-After, and treats a 206 partial purge as success (no longer trips the circuit breaker).
+* FIX: warm-up now targets the canonical page URL — query string and fragment are stripped and an empty path is normalised to "/". A page is no longer warmed as several separate cache objects when WPML or another plugin decorates home_url()/get_permalink() during a save (e.g. a stray ?translation_priority=…), and "https://site" / "https://site/" collapse into one.
+* Filters: flavor_edge_preload_health_url, flavor_edge_preload_health_timeout, flavor_edge_preload_health_max_latency, flavor_edge_preload_wait_delay.
 
 = 1.6.0 =
 * FIX (cache fragmentation): Vary: X-Device and Vary: Accept-Language are no longer sent by default. The plugin serves the same anonymous HTML to every device, and WPML/Polylang carry the language in the URL, so these only split the edge cache into extra copies per device bucket and per browser Accept-Language string, with no real variant behind them — hurting the hit ratio. Both are now opt-in (for sites that genuinely serve different HTML for the same URL), the Vary header is merged with (not replacing) any legitimate Vary already set while still stripping Cookie / User-Agent, and a one-time migration turns them off on existing installs with a dismissible notice.
