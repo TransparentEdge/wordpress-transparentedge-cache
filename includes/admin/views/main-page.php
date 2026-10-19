@@ -422,7 +422,7 @@ defined( 'ABSPATH' ) || exit;
 								<label style="display:block;margin-bottom:6px;">
 									<input type="radio" name="page_cache_backend" value="memcached" <?php checked( $settings['page_cache_backend'], 'memcached' ); ?> />
 									<strong><?php esc_html_e( 'Memcached', 'flavor-edge-cache' ); ?></strong>
-									<?php if ( ! empty( $backends['memcached'] ) ) : ?><span style="color:#155724;font-weight:600;">✓ <?php esc_html_e( 'Available', 'flavor-edge-cache' ); ?></span><?php else : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Not available on this server (Memcached PHP extension missing) — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php endif; ?>
+									<?php if ( ! empty( $backends['memcached'] ) ) : ?><span style="color:#155724;font-weight:600;">✓ <?php esc_html_e( 'Available', 'flavor-edge-cache' ); ?></span><?php elseif ( ! empty( $backends['memcached_server'] ) ) : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Memcached server detected, but the PHP extension is not installed — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php else : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Not available here — needs the Memcached PHP extension and a running server; selecting it would cache nothing.', 'flavor-edge-cache' ); ?></span><?php endif; ?>
 										— <?php esc_html_e( 'Same in-memory advantage as Redis; its flush is generation-based so it never wipes a store shared with the object cache. Requires the Memcached service and extension.', 'flavor-edge-cache' ); ?>
 								</label>
 							</fieldset>
@@ -590,6 +590,13 @@ defined( 'ABSPATH' ) || exit;
 							<option value="prefetch" <?php selected( $settings['preload_method'], 'prefetch' ); ?>><?php esc_html_e( 'Prefetch (populates without evicting, but fans out ~1 fetch per node — strong origins only)', 'flavor-edge-cache' ); ?></option>
 						</select>
 						<p class="description"><?php esc_html_e( 'Refetch collapses the origin fetches through the refetcher nodes (origin sees one or two per URL). Prefetch warms every node directly, so each node fetches from the origin — only choose it if your origin can take one request per edge node per URL.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Adaptive pacing', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="preload_autotune" value="1" <?php checked( $settings['preload_autotune'] ); ?> /> <?php esc_html_e( 'Auto-tune the warm-up speed to what the origin can take', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Ramps the batch size up while the origin keeps up (its latency stays near its own baseline) and the page-cache disk has headroom, and cuts it back when the origin starts to slow, the platform rate-limits, or the disk runs low. It tunes to the origin\'s real capacity whatever its speed. The guardrails (health gate, backoff, off-peak) are unchanged — this only moves within them. Ideal for sites with thousands of URLs.', 'flavor-edge-cache' ); ?></p>
 					</td>
 				</tr>
 				<tr>

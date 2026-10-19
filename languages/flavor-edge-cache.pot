@@ -1,7 +1,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.7.0\n"
+"Project-Id-Version: Transparent Edge Cache 1.8.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-15 09:56+0000\n"
 "Language: \n"
@@ -1412,11 +1412,6 @@ msgstr ""
 msgid "Available"
 msgstr ""
 
-msgid ""
-"Not available on this server (Memcached PHP extension missing) — selecting "
-"this would cache nothing."
-msgstr ""
-
 msgid "Not available on this server — selecting this would cache nothing."
 msgstr ""
 
@@ -1530,4 +1525,44 @@ msgid ""
 "This toggle governs the manual preload. The automatic preload after a full "
 "purge is always gated, whatever this is set to, so a scheduled warm never "
 "overloads the origin unattended."
+msgstr ""
+
+msgid "Adaptive pacing"
+msgstr ""
+
+msgid "Auto-tune the warm-up speed to what the origin can take"
+msgstr ""
+
+msgid ""
+"Ramps the batch size up while the origin keeps up (its latency stays near "
+"its own baseline) and the page-cache disk has headroom, and cuts it back "
+"when the origin starts to slow, the platform rate-limits, or the disk runs "
+"low. It tunes to the origin's real capacity whatever its speed. The "
+"guardrails (health gate, backoff, off-peak) are unchanged — this only moves "
+"within them. Ideal for sites with thousands of URLs."
+msgstr ""
+
+msgid ""
+"Memcached server detected, but the PHP extension is not installed — "
+"selecting this would cache nothing."
+msgstr ""
+
+msgid ""
+"Memcached server running, but the PHP extension is not installed. Install it"
+" with: sudo apt install php-memcached && sudo systemctl restart php-fpm"
+msgstr ""
+
+msgid ""
+"Not available here — needs the Memcached PHP extension and a running server;"
+" selecting it would cache nothing."
+msgstr ""
+
+msgid ""
+"phpredis is installed but no Redis server answered here. Start Redis, or "
+"point WP_REDIS_HOST / WP_REDIS_PORT at a running one."
+msgstr ""
+
+msgid ""
+"the Memcached PHP extension is installed but no server answered here. Start "
+"memcached, or point WP_MEMCACHED_HOST / WP_MEMCACHED_PORT at a running one."
 msgstr ""

@@ -107,6 +107,7 @@ class TE_Settings {
 			// Preload (bulk sitemap warm after a full purge).
 			'preload_sitemap'       => true,      // Opt-in: warm the whole sitemap after a full purge.
 			'preload_method'        => 'refetch', // 'refetch' (evict+repopulate, origin-aggregated — default, origin-safe) or 'prefetch' (populate without evicting, but fans out ~1 origin fetch/node — only for strong origins).
+			'preload_autotune'      => true,      // Adaptive pacer: ramp batch size up while the origin is fast and disk/backend healthy, halve it on rate-limit, slow origin or low disk. Guardrails (health gate, backoff, off-peak) are unchanged.
 			'preload_health_gate'   => true,      // Probe origin health before each batch; pause and back off if the origin is slow or erroring.
 			'preload_offpeak'       => false,     // Restrict bulk preload to an off-peak window (site timezone).
 			'preload_offpeak_start' => 1,         // Off-peak window start hour (0-23).

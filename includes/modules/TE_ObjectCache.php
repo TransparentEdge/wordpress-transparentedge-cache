@@ -43,6 +43,7 @@ class TE_ObjectCache {
 			'redis_server' => false,
 			'redis_info'  => '',
 			'memcached'   => false,
+			'memcached_server' => false,
 			'memcached_info' => '',
 			'apcu'        => false,
 			'apcu_info'   => '',
@@ -51,22 +52,28 @@ class TE_ObjectCache {
 
 		// Redis via phpredis extension.
 		if ( class_exists( 'Redis' ) ) {
-			$result['redis'] = true;
 			$host = defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1';
 			$port = defined( 'WP_REDIS_PORT' ) ? WP_REDIS_PORT : 6379;
 			$pass = defined( 'WP_REDIS_PASSWORD' ) ? WP_REDIS_PASSWORD : '';
 			$result['redis_info'] = $host . ':' . $port;
 
-			// Test connection.
+			// The extension alone proves nothing: a box can ship phpredis with no
+			// Redis daemon running. Only a live round-trip (connect + PING) marks it
+			// available, or we would green-light a backend that caches nothing.
 			try {
 				$redis = new \Redis();
 				if ( @$redis->connect( $host, (int) $port, 1 ) ) {
 					if ( $pass ) {
 						$redis->auth( $pass );
 					}
-					$info = $redis->info( 'memory' );
-					$result['redis_info'] .= ' — ' . size_format( $info['used_memory'] ?? 0 ) . ' used';
+					if ( @$redis->ping() ) {
+						$result['redis'] = true;
+						$info = $redis->info( 'memory' );
+						$result['redis_info'] .= ' — ' . size_format( $info['used_memory'] ?? 0 ) . ' used';
+					}
 					$redis->close();
+				} else {
+					$result['redis_info'] .= ' — ' . __( 'phpredis is installed but no Redis server answered here. Start Redis, or point WP_REDIS_HOST / WP_REDIS_PORT at a running one.', 'flavor-edge-cache' );
 				}
 			} catch ( \Exception $e ) {
 				$result['redis_info'] .= ' — connection failed: ' . $e->getMessage();
@@ -122,12 +129,53 @@ class TE_ObjectCache {
 			}
 		}
 
-		// Memcached.
+		// Memcached — like Redis, require BOTH the extension AND a live server.
+		// addServer() never connects, so the class existing tells us nothing; we
+		// force a set+get round-trip and only then call it available. Otherwise a
+		// box with the client library but no daemon would show a green tick and
+		// silently cache nothing.
 		if ( class_exists( 'Memcached' ) ) {
-			$result['memcached'] = true;
 			$host = defined( 'WP_MEMCACHED_HOST' ) ? WP_MEMCACHED_HOST : '127.0.0.1';
-			$port = defined( 'WP_MEMCACHED_PORT' ) ? WP_MEMCACHED_PORT : 11211;
+			$port = defined( 'WP_MEMCACHED_PORT' ) ? (int) WP_MEMCACHED_PORT : 11211;
 			$result['memcached_info'] = $host . ':' . $port;
+			try {
+				$mc = new \Memcached();
+				$mc->setOption( \Memcached::OPT_CONNECT_TIMEOUT, 500 ); // ms, fail fast.
+				$mc->setOption( \Memcached::OPT_POLL_TIMEOUT, 500 );
+				$mc->addServer( $host, $port );
+				if ( @$mc->set( 'fe_pc_probe', 'ok', 5 ) && 'ok' === @$mc->get( 'fe_pc_probe' ) ) {
+					$result['memcached'] = true;
+					$ver = @$mc->getVersion();
+					if ( is_array( $ver ) ) {
+						$v = reset( $ver );
+						if ( $v && '255.255.255' !== $v ) {
+							$result['memcached_info'] .= ' — ' . $v;
+						}
+					}
+				} else {
+					$result['memcached_info'] .= ' — ' . __( 'the Memcached PHP extension is installed but no server answered here. Start memcached, or point WP_MEMCACHED_HOST / WP_MEMCACHED_PORT at a running one.', 'flavor-edge-cache' );
+				}
+				@$mc->quit();
+			} catch ( \Throwable $e ) {
+				$result['memcached_info'] .= ' — probe failed: ' . $e->getMessage();
+			}
+		} else {
+			// Extension missing — see if a daemon is nonetheless running (text-protocol
+			// "version" probe) so we can tell the admin to install the extension rather
+			// than imply there is no server at all. Mirrors the Redis socket detection.
+			$host = defined( 'WP_MEMCACHED_HOST' ) ? WP_MEMCACHED_HOST : '127.0.0.1';
+			$port = defined( 'WP_MEMCACHED_PORT' ) ? (int) WP_MEMCACHED_PORT : 11211;
+			$socket = @fsockopen( $host, (int) $port, $errno, $errstr, 1 );
+			if ( $socket ) {
+				@fwrite( $socket, "version\r\n" );
+				$response = @fgets( $socket, 128 );
+				@fclose( $socket );
+				if ( false !== strpos( (string) $response, 'VERSION' ) ) {
+					$result['memcached_server'] = true;
+					$result['memcached_info']   = $host . ':' . $port . ' — ' .
+						__( 'Memcached server running, but the PHP extension is not installed. Install it with: sudo apt install php-memcached && sudo systemctl restart php-fpm', 'flavor-edge-cache' );
+				}
+			}
 		}
 
 		// APCu.
@@ -441,12 +489,14 @@ class WP_Object_Cache_Redis {
 	private $non_persistent = array();
 	private $blog_prefix = '';
 	private $global_prefix = '';
+	private $salt = '';
 	public $cache_hits   = 0;
 	public $cache_misses = 0;
 
 	public function __construct() {
 		$this->blog_prefix   = is_multisite() ? get_current_blog_id() . ':' : '';
 		$this->global_prefix = defined( 'WP_REDIS_PREFIX' ) ? WP_REDIS_PREFIX : '';
+		$this->salt = 'feoc:' . substr( md5( ( defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : '' ) . ( defined( 'DB_NAME' ) ? DB_NAME : '' ) . '|' . ( isset( $GLOBALS['table_prefix'] ) ? $GLOBALS['table_prefix'] : '' ) ), 0, 12 ) . ':';
 		$this->connect();
 	}
 
@@ -470,7 +520,7 @@ class WP_Object_Cache_Redis {
 
 	private function key( $key, $group ) {
 		$prefix = in_array( $group, $this->global_groups, true ) ? $this->global_prefix : $this->blog_prefix;
-		return $prefix . $group . ':' . $key;
+		return $this->salt . $prefix . $group . ':' . $key;
 	}
 
 	public function get( $key, $group = 'default', $force = false, &$found = null ) {
@@ -551,7 +601,15 @@ class WP_Object_Cache_Redis {
 
 	public function flush() {
 		$this->cache = array();
-		if ( $this->redis ) { $this->redis->flushDb(); }
+		if ( $this->redis ) {
+				// Prefix-scoped delete; NEVER flushDb(), which wipes the whole DB
+				// (page-cache shield and any co-tenant, production included).
+				$it = null;
+				do {
+					$keys = $this->redis->scan( $it, $this->salt . '*', 500 );
+					if ( is_array( $keys ) && $keys ) { $this->redis->del( $keys ); }
+				} while ( $it > 0 );
+			}
 		return true;
 	}
 
@@ -697,6 +755,8 @@ function wp_cache_close() { return true; }
 
 class WP_Object_Cache_Memcached {
 	private $mc;
+	private $salt = '';
+	private $gen = null;
 	private $cache = array();
 	private $global_groups = array( 'users', 'userlogins', 'usermeta', 'user_meta', 'site-transient', 'site-options', 'blog-lookup', 'blog-details', 'global-posts', 'networks', 'rss' );
 	private $non_persistent = array();
@@ -706,6 +766,7 @@ class WP_Object_Cache_Memcached {
 
 	public function __construct() {
 		$this->prefix = is_multisite() ? get_current_blog_id() . ':' : '';
+		$this->salt = 'feoc:' . substr( md5( ( defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : '' ) . ( defined( 'DB_NAME' ) ? DB_NAME : '' ) . '|' . ( isset( $GLOBALS['table_prefix'] ) ? $GLOBALS['table_prefix'] : '' ) ), 0, 12 ) . ':';
 		if ( class_exists( 'Memcached' ) ) {
 			try {
 				$this->mc = new Memcached();
@@ -720,7 +781,7 @@ class WP_Object_Cache_Memcached {
 
 	private function key( $key, $group ) {
 		$p = in_array( $group, $this->global_groups, true ) ? '' : $this->prefix;
-		return 'fe:' . md5( $p . $group . ':' . $key );
+		return $this->salt . $this->gen() . ':' . md5( $p . $group . ':' . $key );
 	}
 
 	public function get( $key, $group = 'default', $force = false, &$found = null ) {
@@ -787,7 +848,30 @@ class WP_Object_Cache_Memcached {
 		$this->cache[ $k ] = $val; return $val;
 	}
 
-	public function flush() { $this->cache = array(); if ( $this->mc ) { $this->mc->flush(); } return true; }
+	public function flush() {
+		$this->cache = array();
+		// Bump OUR generation only. NEVER Memcached::flush(): that is instance-wide
+		// and would take the page-cache shield and every other tenant (a production
+		// site sharing this memcached included) with it.
+		if ( $this->mc ) {
+			if ( false === $this->mc->increment( $this->salt . 'gen' ) ) {
+				$this->mc->set( $this->salt . 'gen', 2 );
+			}
+			$this->gen = null;
+		}
+		return true;
+	}
+
+	private function gen() {
+		if ( null !== $this->gen ) { return $this->gen; }
+		if ( ! $this->mc ) { return $this->gen = 0; }
+		$g = $this->mc->get( $this->salt . 'gen' );
+		if ( Memcached::RES_NOTFOUND === $this->mc->getResultCode() ) {
+			$this->mc->add( $this->salt . 'gen', 1 );
+			$g = $this->mc->get( $this->salt . 'gen' );
+		}
+		return $this->gen = max( 1, (int) $g );
+	}
 	public function add_global_groups( $groups ) { $this->global_groups = array_unique( array_merge( $this->global_groups, (array) $groups ) ); }
 	public function add_non_persistent_groups( $groups ) { $this->non_persistent = array_unique( array_merge( $this->non_persistent, (array) $groups ) ); }
 	public function switch_to_blog( $blog_id ) { $this->prefix = is_multisite() ? $blog_id . ':' : ''; }

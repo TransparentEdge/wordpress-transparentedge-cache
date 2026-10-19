@@ -278,7 +278,7 @@ class TE_Admin {
 			'minify_html', 'minify_css', 'minify_js', 'combine_css', 'combine_js', 'delay_js', 'defer_js',
 			'lazyload_images', 'lazyload_iframes', 'preload_lcp', 'selfhost_google_fonts',
 			'woo_exclude_cart', 'woo_exclude_checkout', 'woo_exclude_account', 'woo_purge_stock',
-			'preload_sitemap', 'preload_health_gate', 'preload_offpeak',
+			'preload_sitemap', 'preload_health_gate', 'preload_offpeak', 'preload_autotune',
 			'heartbeat_disable_admin', 'heartbeat_disable_editor',
 			'debug_mode',
 			'speculation_enabled',

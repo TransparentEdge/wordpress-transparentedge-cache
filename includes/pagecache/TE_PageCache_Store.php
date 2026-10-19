@@ -160,14 +160,51 @@ class TE_PageCache_Store {
 			'headers' => ( isset( $meta['headers'] ) && is_array( $meta['headers'] ) ) ? array_values( $meta['headers'] ) : array(),
 			'html'    => (string) $html,
 		);
+		$t0 = microtime( true );
 		switch ( $this->backend ) {
 			case 'redis':
-				return $this->redis_set( $key, $entry );
+				$ok = $this->redis_set( $key, $entry );
+				break;
 			case 'memcached':
-				return $this->memcached_set( $key, $entry );
+				$ok = $this->memcached_set( $key, $entry );
+				break;
 			default:
-				return $this->disk_set( $key, $entry );
+				$ok = $this->disk_set( $key, $entry );
+				break;
 		}
+		self::record_write_latency( ( microtime( true ) - $t0 ) * 1000.0 );
+		return $ok;
+	}
+
+	/** Transient holding the rolling page-cache write latency (ms). */
+	const WRITE_MS_KEY = 'flavor_edge_pc_write_ms';
+
+	/**
+	 * Record the latency of a page-cache write as a rolling EWMA. Warming a URL
+	 * writes its entry here anyway, so the preload's adaptive pacer can sense
+	 * disk/backend write pressure from THIS — no extra origin request. It is
+	 * cross-request (the writes happen in the refetcher's origin hits, the pacer
+	 * reads them from its own run), so it lives in a transient.
+	 *
+	 * @param float $ms Write duration in milliseconds.
+	 */
+	private static function record_write_latency( $ms ) {
+		if ( $ms < 0 || ! function_exists( 'get_transient' ) ) {
+			return;
+		}
+		$prev = (float) get_transient( self::WRITE_MS_KEY );
+		$ewma = $prev > 0 ? ( 0.8 * $prev + 0.2 * $ms ) : $ms;
+		set_transient( self::WRITE_MS_KEY, $ewma, 600 );
+	}
+
+	/**
+	 * Current rolling page-cache write latency in ms (0 when unknown — e.g. no
+	 * writes yet, or a memory backend where writes are effectively free).
+	 *
+	 * @return float
+	 */
+	public static function write_latency_ms() {
+		return function_exists( 'get_transient' ) ? (float) get_transient( self::WRITE_MS_KEY ) : 0.0;
 	}
 
 	/**
@@ -183,7 +220,10 @@ class TE_PageCache_Store {
 				return $r ? ( false !== $r->del( $this->rkey( $key ) ) ) : false;
 			case 'memcached':
 				$m = $this->memcached();
-				return $m ? $m->delete( $this->rkey( $key ) ) : false;
+				// Must match the generation-scoped key used by get/set (mkey), not
+				// the bare rkey — otherwise the surgical delete targets a key that
+				// was never written and the stale entry survives until its TTL.
+				return $m ? $m->delete( $this->mkey( $key ) ) : false;
 			default:
 				$f = $this->path( $key );
 				return file_exists( $f ) ? @unlink( $f ) : true;
@@ -303,15 +343,23 @@ class TE_PageCache_Store {
 		}
 		try {
 			$r    = new \Redis();
-			$host = defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1';
-			$port = defined( 'WP_REDIS_PORT' ) ? (int) WP_REDIS_PORT : 6379;
+			// A page cache on the generic WP_REDIS_* connection shares a DB with
+			// every other plugin, so a third-party FLUSHDB (a WPO plugin clearing
+			// its own cache on minify, etc.) would take the shield with it.
+			// Dedicated FLAVOR_EDGE_PC_REDIS_* let the shield live on its own
+			// instance or DB index, out of that blast radius. Falls back to WP_REDIS_*.
+			$host = defined( 'FLAVOR_EDGE_PC_REDIS_HOST' ) ? FLAVOR_EDGE_PC_REDIS_HOST : ( defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1' );
+			$port = defined( 'FLAVOR_EDGE_PC_REDIS_PORT' ) ? (int) FLAVOR_EDGE_PC_REDIS_PORT : ( defined( 'WP_REDIS_PORT' ) ? (int) WP_REDIS_PORT : 6379 );
 			if ( ! @$r->connect( $host, $port, 1 ) ) {
 				return null;
 			}
-			if ( defined( 'WP_REDIS_PASSWORD' ) && WP_REDIS_PASSWORD ) {
-				$r->auth( WP_REDIS_PASSWORD );
+			$pass = defined( 'FLAVOR_EDGE_PC_REDIS_PASSWORD' ) ? FLAVOR_EDGE_PC_REDIS_PASSWORD : ( defined( 'WP_REDIS_PASSWORD' ) ? WP_REDIS_PASSWORD : '' );
+			if ( $pass ) {
+				$r->auth( $pass );
 			}
-			if ( defined( 'WP_REDIS_DATABASE' ) ) {
+			if ( defined( 'FLAVOR_EDGE_PC_REDIS_DB' ) ) {
+				$r->select( (int) FLAVOR_EDGE_PC_REDIS_DB ); // dedicated DB → immune to a foreign FLUSHDB on DB 0.
+			} elseif ( defined( 'WP_REDIS_DATABASE' ) ) {
 				$r->select( (int) WP_REDIS_DATABASE );
 			}
 			$this->conn = $r;
@@ -381,8 +429,11 @@ class TE_PageCache_Store {
 		}
 		try {
 			$m    = new \Memcached();
-			$host = defined( 'WP_MEMCACHED_HOST' ) ? WP_MEMCACHED_HOST : '127.0.0.1';
-			$port = defined( 'WP_MEMCACHED_PORT' ) ? (int) WP_MEMCACHED_PORT : 11211;
+			// Dedicated page-cache server isolates the shield from a third-party
+			// flush_all on the generic WP_MEMCACHED_* instance (flush_all is
+			// instance-wide and cannot be survived by any key trick). Falls back to it.
+			$host = defined( 'FLAVOR_EDGE_PC_MEMCACHED_HOST' ) ? FLAVOR_EDGE_PC_MEMCACHED_HOST : ( defined( 'WP_MEMCACHED_HOST' ) ? WP_MEMCACHED_HOST : '127.0.0.1' );
+			$port = defined( 'FLAVOR_EDGE_PC_MEMCACHED_PORT' ) ? (int) FLAVOR_EDGE_PC_MEMCACHED_PORT : ( defined( 'WP_MEMCACHED_PORT' ) ? (int) WP_MEMCACHED_PORT : 11211 );
 			$m->addServer( $host, $port );
 			$this->conn = $m;
 		} catch ( \Throwable $e ) {

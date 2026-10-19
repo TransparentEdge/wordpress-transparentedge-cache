@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -49,6 +49,16 @@ Transparent Edge Cache is the official WordPress plugin for the [Transparent Edg
 3. Complete the Setup Wizard or enter credentials manually
 
 == Changelog ==
+
+= 1.8.0 =
+* NEW (adaptive warm-up pacing): the sitemap preload now auto-tunes its throughput to what the origin can take, instead of a fixed rate. It grows the batch size while the origin answers fast and the page-cache disk has headroom, and halves it on a platform rate limit, a slow origin, or a near-full disk (AIMD). On a strong origin a bulk warm of thousands of URLs finishes in a fraction of the time; on a weak one it stays slow and safe by itself. The guardrails are unchanged — it only moves within them. Toggle under TE Cache → Cache → Adaptive pacing.
+* NEW (disk guardrail): because warming a URL also writes its page-cache entry, a bulk warm is disk I/O on the origin, not just HTTP fetches. The preload now pauses when the page-cache disk drops below a free-space floor (disk backend only; Redis/Memcached write to memory and are exempt). Filter: flavor_edge_preload_disk_floor.
+* The preload URL cap is now filterable (flavor_edge_preload_max_urls) for sites with more than a few hundred URLs; adaptive-pacer thresholds are filterable too (flavor_edge_preload_batch_max, flavor_edge_preload_up_tolerance, flavor_edge_preload_down_tolerance, flavor_edge_preload_disk_green).
+* FIX (Memcached surgical invalidation): a per-URL page-cache delete targeted the non-generation key while get/set use the generation-scoped key, so on Memcached the surgical delete always missed and changed pages rode the TTL instead of being evicted on publish. Now matched. Redis was unaffected (it is generation-less and already consistent).
+* FIX (object cache no longer flushes a shared store): the bundled object cache's wp_cache_flush() did a Memcached flush_all / Redis flushDb that wiped the ENTIRE instance — taking the page-cache shield and any other tenant (a production site sharing the same server via the generic WP_MEMCACHED_* / WP_REDIS_* connection) down with it, on any flush fired by WordPress, WP-CLI or a third-party WPO plugin (e.g. on minify). It now invalidates only its own entries (generation bump on Memcached, prefix-scoped SCAN+DEL on Redis) and namespaces its keys per install, so two installs sharing one instance never collide or flush each other.
+* NEW (dedicated page-cache connection): FLAVOR_EDGE_PC_MEMCACHED_HOST/PORT and FLAVOR_EDGE_PC_REDIS_HOST/PORT/PASSWORD/DB let the page cache live on its own Memcached instance or Redis DB index, isolated from the generic connection other plugins share — so a third-party flush_all/flushDb cannot reach the shield (flush_all is instance-wide and survives no key trick; isolation is the only real guard). Each falls back to the matching WP_* constant, so default behaviour is unchanged.
+* FIX (origin page cache — archive coverage): a content change now evicts the affected taxonomy (category/tag), author and post-type archive pages from the origin page cache, not just the post permalink and the home. Before, those archives rode the short TTL, and with a long edge HTML TTL plus refetch an archive could be re-cached stale at the edge. (Multilingual note: the current-language archive URL is evicted; the edge still drops all languages via the surrogate tag.)
+* FIX (storage backend detection): the Redis and Memcached page-cache options are now reported as "Available" only after a live round-trip to the server, not merely when the PHP client extension is present. Before, a box with the client library but no running daemon showed a green tick and, if selected, the page cache silently stored nothing (origin left unshielded). Memcached is now verified with a real set/get round-trip and Redis with connect+PING; a server-up-but-extension-missing case is detected for both so the advice is accurate.
 
 = 1.7.0 =
 * NEW (origin-safe warm-up): after a post is republished, the changed URLs are now re-warmed with a platform refetch instead of an origin-side GET. One call re-warms the URL on every edge node (the invalidation fans out to all nodes), while the shared refetcher nodes aggregate the origin fetches — the origin sees one or two requests instead of one per node — and it needs no MidTier. The origin GET is kept as an automatic fallback for when the platform API is unavailable (selectable under TE Cache → Cache → Warm method).

@@ -139,6 +139,44 @@ class TE_PageCache {
 		);
 	}
 
+	/**
+	 * Disk pressure of the page-cache store, for the preload's adaptive pacer:
+	 * warming a URL also writes its page-cache entry, so a bulk warm is disk I/O
+	 * on the origin, not just HTTP fetches. Only meaningful for the disk backend
+	 * — Redis/Memcached write to memory, so they report null (no disk gate).
+	 *
+	 * @return array { backend: string, free_ratio: float|null, free_bytes: int|null }
+	 */
+	public static function disk_pressure() {
+		$backend = TE_Settings::get( 'page_cache_backend' );
+		if ( 'disk' !== $backend ) {
+			return array( 'backend' => (string) $backend, 'free_ratio' => null, 'free_bytes' => null );
+		}
+		$dir   = self::base_dir();
+		$probe = is_dir( $dir ) ? $dir : WP_CONTENT_DIR;
+		$free  = @disk_free_space( $probe );
+		$total = @disk_total_space( $probe );
+		$ratio = ( $free && $total ) ? ( (float) $free / (float) $total ) : null;
+		return array(
+			'backend'    => 'disk',
+			'free_ratio' => $ratio,
+			'free_bytes' => $free ? (int) $free : null,
+		);
+	}
+
+	/**
+	 * Rolling page-cache write latency in ms, for the preload's adaptive pacer.
+	 * The warm writes every entry to the store, so this is a direct read of how
+	 * hard the cache backend is being pushed — a second degradation signal next
+	 * to origin latency and the disk-free ratio. 0 when unknown (no writes yet).
+	 *
+	 * @return float
+	 */
+	public static function write_latency_ms() {
+		require_once self::engine_file();
+		return TE_PageCache_Store::write_latency_ms();
+	}
+
 	/** The hosts we actually serve, for the cache-key host allowlist. */
 	private static function known_hosts() {
 		$hosts = array();
@@ -341,13 +379,29 @@ class TE_PageCache {
 		}
 		$urls = array();
 		foreach ( (array) $tags as $tag ) {
-			if ( preg_match( '/^post-(\d+)$/', (string) $tag, $m ) ) {
+			$tag = (string) $tag;
+			if ( preg_match( '/^post-(\d+)$/', $tag, $m ) ) {
 				$permalink = get_permalink( (int) $m[1] );
 				if ( $permalink ) {
 					$urls[] = $permalink;
 				}
 			} elseif ( 'front-page' === $tag ) {
 				$urls[] = home_url( '/' );
+			} elseif ( preg_match( '/^term-(\d+)$/', $tag, $m ) ) {
+				// Category / tag / any taxonomy archive the post changed. Without this
+				// the archive rides the 300s TTL, and an immediate refetch re-caches
+				// the stale shield copy into the (long-lived) edge slot.
+				$link = get_term_link( (int) $m[1] );
+				if ( ! is_wp_error( $link ) ) {
+					$urls[] = $link;
+				}
+			} elseif ( preg_match( '/^author-(\d+)$/', $tag, $m ) ) {
+				$urls[] = get_author_posts_url( (int) $m[1] );
+			} elseif ( preg_match( '/^type-(.+)$/', $tag, $m ) ) {
+				$archive = get_post_type_archive_link( $m[1] );
+				if ( $archive ) {
+					$urls[] = $archive;
+				}
 			}
 		}
 		if ( ! empty( $urls ) ) {
@@ -509,16 +563,28 @@ class TE_PageCache {
 			return array( 'success' => true, 'message' => '' );
 		}
 
-		// Back up wp-config.php to a NON web-served location before editing.
-		// Stored in the plugin's private cache dir behind a PHP guard
-		// (<?php exit; __halt_compiler();) so a direct web hit reveals nothing.
+		// Transient backup of wp-config.php, only to survive the write below. It
+		// lives in the plugin's cache dir (guarded by .htaccess + index.php) behind
+		// a PHP guard (<?php exit; __halt_compiler();) so a direct web hit reveals
+		// nothing even on Apache; but the real safeguard is that we DELETE it the
+		// moment the write succeeds — a lasting full copy of wp-config.php (DB
+		// credentials, auth salts) must never sit on disk for a backup/migration
+		// plugin, an LFI doing a raw file read, or a mis-served .php to expose.
 		self::ensure_dirs();
 		$backup = self::base_dir() . '/wp-config-' . substr( md5( $path ), 0, 10 ) . '.bak.php';
 		@file_put_contents( $backup, "<?php exit; __halt_compiler();\n" . $contents, LOCK_EX );
 
 		if ( false === @file_put_contents( $path, $new, LOCK_EX ) ) {
+			// Best-effort rollback from the copy we still hold in memory, and keep
+			// the guarded backup on disk for manual recovery of this rare failure.
+			@file_put_contents( $path, $contents, LOCK_EX );
 			return array( 'success' => false, 'message' => __( 'Could not update wp-config.php.', 'flavor-edge-cache' ) );
 		}
+
+		// Success: the backup has done its job. Our edit only inserts a marked
+		// block (disabling strips it), so nothing needs a full-file backup for
+		// rollback — remove it so no copy of the secrets lingers.
+		@unlink( $backup );
 		return array( 'success' => true, 'message' => '' );
 	}
 

@@ -35,6 +35,7 @@ class TE_Preload {
 	public static function init() {
 		add_action( 'flavor_edge_preload_batch', array( __CLASS__, 'cron_process_batch' ) );
 		add_action( 'flavor_edge_after_purge_all', array( __CLASS__, 'on_purge_all' ) );
+		add_action( 'rest_api_init', array( __CLASS__, 'register_health_route' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_tick', array( __CLASS__, 'ajax_tick' ) );
 	}
 
@@ -85,6 +86,9 @@ class TE_Preload {
 			'retry_after' => 0,
 			'waiting'     => '',
 			'unattended'  => (bool) $unattended,
+			'batch_size'  => self::BATCH_SIZE, // adaptive pacer ramps this up/down.
+			'lat_base'    => 0.0,              // origin baseline latency the pacer tunes against.
+			'write_base'  => 0.0,              // page-cache write baseline the pacer also tunes against.
 		);
 
 		update_option( self::STATUS_KEY, $status, false );
@@ -213,19 +217,47 @@ class TE_Preload {
 			return $status;
 		}
 
-		// Origin-health gate: don't add warm load to a struggling origin. Applies
-		// to both the manual and the automatic path (both run through here); for
-		// an unattended run it is forced on even if the toggle is off, so a
-		// scheduled warm can never topple the origin with nobody watching.
-		$health_gate = TE_Settings::get( 'preload_health_gate' ) || ! empty( $status['unattended'] );
-		if ( $health_gate && ! self::origin_is_healthy() ) {
+		$autotune = (bool) TE_Settings::get( 'preload_autotune' );
+
+		// Probe the origin once per batch. The health gate uses it as a hard
+		// pause; the adaptive pacer uses its latency as the "speed up / slow
+		// down" signal. Probe when the gate is active OR auto-tune needs it.
+		$gate_on = TE_Settings::get( 'preload_health_gate' ) || ! empty( $status['unattended'] );
+		$probe   = ( $gate_on || $autotune ) ? self::probe_origin() : array( 'ok' => true, 'latency' => 0.0 );
+
+		// Origin-health GATE (guardrail): hard-pause a struggling origin. Forced
+		// on for unattended runs even if the toggle is off.
+		if ( $gate_on && empty( $probe['ok'] ) ) {
 			$status['last_batch'] = time();
 			$status['backoff']    = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
 			$status['waiting']    = 'origin_unhealthy';
+			if ( $autotune ) {
+				$status['batch_size'] = 1;
+			}
 			return $status;
 		}
 
-		$batch = array_splice( $status['remaining'], 0, self::BATCH_SIZE );
+		// Disk GATE (guardrail): warming a URL also WRITES its page-cache entry,
+		// so a bulk warm is disk I/O on the origin, not just HTTP. A near-full
+		// disk must pause the warm. Only the disk backend reports a ratio.
+		$disk      = TE_PageCache::disk_pressure();
+		$disk_floor = (float) apply_filters( 'flavor_edge_preload_disk_floor', 0.10 );
+		if ( null !== $disk['free_ratio'] && $disk['free_ratio'] < $disk_floor ) {
+			$status['last_batch'] = time();
+			$status['backoff']    = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
+			$status['waiting']    = 'disk_low';
+			if ( $autotune ) {
+				$status['batch_size'] = 1;
+			}
+			return $status;
+		}
+
+		// Adaptive batch size, always clamped by the guardrails above.
+		$bs = $autotune
+			? max( 1, (int) ( isset( $status['batch_size'] ) ? $status['batch_size'] : self::BATCH_SIZE ) )
+			: self::BATCH_SIZE;
+
+		$batch = array_splice( $status['remaining'], 0, $bs );
 
 		// One platform call warms the whole batch across all nodes.
 		$method = TE_Settings::get( 'preload_method' );
@@ -247,10 +279,32 @@ class TE_Preload {
 				$status['backoff']     = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
 				$status['retry_after'] = (int) ( isset( $result['retry_after'] ) ? $result['retry_after'] : 0 );
 				$status['remaining']   = array_merge( $batch, $status['remaining'] );
+				if ( $autotune ) {
+					$status['batch_size'] = max( 1, (int) floor( $bs / 2 ) ); // multiplicative decrease.
+				}
 			}
 		} else {
 			$status['backoff']     = 0;
 			$status['retry_after'] = 0;
+			if ( $autotune ) {
+				// Two degradation signals, each against its own best-case baseline:
+				// origin regen latency AND page-cache write latency (the warm writes
+				// every entry to the cache disk/backend, so that cost is real too).
+				$origin_lat = isset( $probe['latency'] ) ? (float) $probe['latency'] : 0.0;
+				$write_lat  = TE_PageCache::write_latency_ms();
+
+				$origin_base = self::track_baseline( isset( $status['lat_base'] ) ? (float) $status['lat_base'] : 0.0, $origin_lat );
+				$write_base  = self::track_baseline( isset( $status['write_base'] ) ? (float) $status['write_base'] : 0.0, $write_lat );
+
+				$status['batch_size'] = self::tune_batch_size(
+					$bs,
+					self::degrade_ratio( $origin_lat, $origin_base ),
+					self::degrade_ratio( $write_lat, $write_base ),
+					$disk
+				);
+				$status['lat_base']   = $origin_base;
+				$status['write_base'] = $write_base;
+			}
 		}
 
 		if ( empty( $status['remaining'] ) ) {
@@ -307,11 +361,46 @@ class TE_Preload {
 	}
 
 	/**
+	 * Register the cheap origin-health endpoint the adaptive pacer probes.
+	 * Served at /wp-json/te-cache/v1/health.
+	 */
+	public static function register_health_route() {
+		register_rest_route( 'te-cache/v1', '/health', array(
+			'methods'             => 'GET',
+			'permission_callback' => '__return_true',
+			'callback'            => array( __CLASS__, 'health_endpoint' ),
+		) );
+	}
+
+	/**
+	 * Cheap origin-health endpoint: a trivial DB round-trip + WordPress bootstrap,
+	 * NOT a page render. The pacer probes this instead of the home page so that
+	 * sensing the origin never regenerates a widget-heavy page (the costliest
+	 * thing on a news/e-commerce origin) and tips a fragile origin over.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public static function health_endpoint() {
+		global $wpdb;
+		$t0    = microtime( true );
+		$db_ok = ( '1' === (string) $wpdb->get_var( 'SELECT 1' ) );
+		$db_ms = ( microtime( true ) - $t0 ) * 1000.0;
+
+		$resp = new \WP_REST_Response( array(
+			'ok'    => $db_ok,
+			'ts'    => time(),
+			'db_ms' => round( $db_ms, 2 ),
+		) );
+		$resp->header( 'Cache-Control', 'no-store, private' );
+		return $resp;
+	}
+
+	/**
 	 * Probe live origin health before piling warm work on it.
 	 *
-	 * Best-effort: hits our own host with a unique-query, no-cache request so it
-	 * reaches the origin (not an edge HIT), and measures status and latency.
-	 * Unhealthy = 5xx / unreachable, or slower than the threshold.
+	 * Best-effort: hits our own cheap health endpoint with a unique-query,
+	 * no-cache request so it reaches the origin (not an edge HIT), and measures
+	 * status and latency. Unhealthy = 5xx / unreachable, or slower than the gate.
 	 *
 	 * Caveat: a site whose VCL normalises away unknown query strings would turn
 	 * this into an edge HIT (measuring the edge, not the origin). For those
@@ -320,12 +409,15 @@ class TE_Preload {
 	 * of the real origin protection (refetch aggregation + paced batches +
 	 * backoff on rate limits), which does not depend on it.
 	 *
-	 * @return bool
+	 * @return array { ok: bool, latency: float } Health verdict and probe latency.
 	 */
-	private static function origin_is_healthy() {
+	private static function probe_origin() {
+		// Probe the cheap health endpoint, NOT the home page: on a news/e-commerce
+		// origin the home regenerates many widgets (very expensive), so sensing it
+		// on every batch would hammer the exact origin the warm-up protects.
 		$probe_url = apply_filters(
 			'flavor_edge_preload_health_url',
-			add_query_arg( 'flavor_edge_health', (string) time(), home_url( '/' ) )
+			add_query_arg( 'te', (string) microtime( true ), rest_url( 'te-cache/v1/health' ) )
 		);
 		$timeout   = (int) apply_filters( 'flavor_edge_preload_health_timeout', 4 );
 
@@ -342,20 +434,91 @@ class TE_Preload {
 		) );
 
 		if ( is_wp_error( $resp ) ) {
-			return false;
+			return array( 'ok' => false, 'latency' => (float) $timeout );
 		}
 
 		$elapsed     = microtime( true ) - $start;
 		$code        = (int) wp_remote_retrieve_response_code( $resp );
 		$max_latency = (float) apply_filters( 'flavor_edge_preload_health_max_latency', 2.5 );
+		$ok          = ! ( 0 === $code || $code >= 500 || $elapsed > $max_latency );
 
-		if ( 0 === $code || $code >= 500 ) {
-			return false;
+		return array( 'ok' => $ok, 'latency' => $elapsed );
+	}
+
+	/**
+	 * AIMD tuning after a successful batch — RELATIVE to the origin's own
+	 * baseline latency, not an absolute threshold (a healthy WordPress origin
+	 * regenerates a page in ~1s, so an absolute "fast" bar would never ramp).
+	 *
+	 * We track the origin's best-case latency ($base) and compare each probe to
+	 * it: while the origin is not slowing down (within up_tolerance of its
+	 * baseline) and disk has headroom, grow the batch additively; when it starts
+	 * to degrade (beyond down_tolerance) or disk tightens, cut it in half. This
+	 * finds the origin's real capacity by itself, whatever its absolute speed.
+	 * The hard guardrails (health gate at max_latency, rate-limit backoff, disk
+	 * floor) still sit underneath.
+	 *
+	 * Two signals, not one: the origin's response latency (how hard regenerating
+	 * HTML is hitting it) AND the page-cache write latency (how hard the warm is
+	 * hitting the cache disk/backend — we write every warmed entry to it). Each
+	 * is judged against its OWN best-case baseline, and the worse of the two
+	 * drives the decision — ramp only while BOTH are near their baseline, cut if
+	 * EITHER degrades. So on a widget-heavy news home the origin stays the
+	 * limiter, and on a cheap-origin / slow-disk box the disk does.
+	 *
+	 * @param int   $bs           Current batch size.
+	 * @param float $origin_ratio Origin latency as a multiple of its baseline (1.0 = at baseline).
+	 * @param float $write_ratio  Page-cache write latency as a multiple of its baseline.
+	 * @param array $disk         { free_ratio, ... } from TE_PageCache::disk_pressure().
+	 * @return int New batch size.
+	 */
+	private static function tune_batch_size( $bs, $origin_ratio, $write_ratio, $disk ) {
+		$max        = (int) apply_filters( 'flavor_edge_preload_batch_max', 20 );
+		$up_tol     = (float) apply_filters( 'flavor_edge_preload_up_tolerance', 1.3 );
+		$down_tol   = (float) apply_filters( 'flavor_edge_preload_down_tolerance', 1.8 );
+		$disk_green = (float) apply_filters( 'flavor_edge_preload_disk_green', 0.20 );
+
+		$disk_ok  = ( null === $disk['free_ratio'] ) || ( $disk['free_ratio'] >= $disk_green );
+		$pressure = max( (float) $origin_ratio, (float) $write_ratio ); // worst of the two.
+
+		if ( $pressure <= $up_tol && $disk_ok ) {
+			return min( $max, $bs + 1 );             // both near baseline → additive increase.
 		}
-		if ( $elapsed > $max_latency ) {
-			return false;
+		if ( $pressure >= $down_tol || ! $disk_ok ) {
+			return max( 1, (int) floor( $bs / 2 ) );  // either degrading → multiplicative decrease.
 		}
-		return true;
+		return $bs;                                   // middle band → hold.
+	}
+
+	/**
+	 * Track a signal's best-case baseline: adopt a new lower floor at once, let
+	 * it drift up only very slowly (2%) so a transient spike reads as degradation
+	 * instead of moving the goalposts. A non-positive reading leaves it unchanged.
+	 *
+	 * @param float $base Current baseline.
+	 * @param float $val  Latest reading.
+	 * @return float Updated baseline.
+	 */
+	private static function track_baseline( $base, $val ) {
+		if ( $val <= 0 ) {
+			return $base;
+		}
+		if ( $base <= 0 || $val < $base ) {
+			return $val;
+		}
+		return $base + 0.02 * ( $val - $base );
+	}
+
+	/**
+	 * A reading as a multiple of its baseline (1.0 when either is unknown, so a
+	 * missing signal never forces a decision on its own).
+	 *
+	 * @param float $val  Latest reading.
+	 * @param float $base Baseline.
+	 * @return float
+	 */
+	private static function degrade_ratio( $val, $base ) {
+		return ( $val > 0 && $base > 0 ) ? ( $val / $base ) : 1.0;
 	}
 
 	/**
@@ -426,7 +589,8 @@ class TE_Preload {
 			$urls = self::extract_locs( $body );
 		}
 
-		return array_slice( array_unique( $urls ), 0, self::MAX_URLS );
+		$max = (int) apply_filters( 'flavor_edge_preload_max_urls', self::MAX_URLS );
+		return array_slice( array_unique( $urls ), 0, max( 1, $max ) );
 	}
 
 	/**
