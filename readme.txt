@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.9.1
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -39,7 +39,7 @@ Transparent Edge Cache is the official WordPress plugin for the [Transparent Edg
 
 **Integrations**
 * WooCommerce, Multisite, WPML, Polylang, Yoast, Elementor
-* Object Cache with Redis and APCu
+* Object Cache with Redis, Memcached and APCu (auto-enabled; supports password-protected Redis)
 * Apache and Nginx support
 
 == Installation ==
@@ -48,7 +48,72 @@ Transparent Edge Cache is the official WordPress plugin for the [Transparent Edg
 2. Activate and go to TE Cache
 3. Complete the Setup Wizard or enter credentials manually
 
+== Object cache ==
+
+The page cache only protects anonymous visitors. Logged-in users, and every wp-admin / admin-ajax request, bypass it and hit the database directly. A persistent object cache (Redis or Memcached) absorbs that load. On a busy, editor-heavy site it is what keeps the database from being overwhelmed even with page cache on.
+
+**Requirements (two things, and they fail separately):**
+
+1. A running **Redis or Memcached daemon**, reachable from the web server.
+2. The matching **PHP extension loaded in the php-fpm SAPI** — `phpredis` for Redis, `php-memcached` for Memcached. Note: the extension must be present in the SAPI WordPress actually runs under (php-fpm), not only in PHP-CLI. Verify with `php-fpm8.x -m | grep -i redis`, or by checking `/etc/php/8.x/fpm/conf.d/` for the extension's `.ini`.
+
+When both are present, the plugin **auto-installs** the object-cache drop-in (TE Cache → Cache → Object cache → Automatic, on by default). It never overwrites an `object-cache.php` from another plugin silently — it flags it and offers a one-click Replace (the foreign drop-in is backed up first).
+
+**Password-protected Redis (secured installs — the common production case):**
+
+If your Redis has `requirepass` set, the daemon is up but the plugin cannot use it until you give it the password in `wp-config.php`. Without it the panel reports *"Redis detected but requires a password"* (and the backend stays unused — it does not silently fall back to a non-persistent cache). Add:
+
+    define( 'WP_REDIS_HOST', '127.0.0.1' );   // default 127.0.0.1
+    define( 'WP_REDIS_PORT', 6379 );          // default 6379
+    define( 'WP_REDIS_PASSWORD', 'your-password' );
+    define( 'WP_REDIS_DATABASE', 0 );         // optional, default 0
+
+The object cache reuses these standard `WP_REDIS_*` constants. After adding them, restart php-fpm and reload the TE Cache panel; the Object cache card should turn green with a hit ratio.
+
+**Isolating the page cache from a shared instance (optional):**
+
+If the origin page cache uses Redis/Memcached on an instance shared with other sites, you can give it its own, isolated connection so a foreign `flush_all` / `flushDb` can never reach it:
+
+    define( 'FLAVOR_EDGE_PC_REDIS_HOST', '127.0.0.1' );
+    define( 'FLAVOR_EDGE_PC_REDIS_PORT', 6379 );
+    define( 'FLAVOR_EDGE_PC_REDIS_PASSWORD', 'your-password' );
+    define( 'FLAVOR_EDGE_PC_REDIS_DB', 2 );
+    // Memcached equivalent: FLAVOR_EDGE_PC_MEMCACHED_HOST / _PORT
+
+Each falls back to the matching `WP_*` constant when unset, so default behaviour is unchanged.
+
+**If the backend goes down:** the panel shows the object cache as *"Not persistent"* in red (recomputing against the database every request) rather than pretending it is healthy. Start the service, or disable the object cache, to clear it.
+
 == Changelog ==
+
+= 1.9.1 =
+Hardening pass after a full code audit, before deploying to a high-traffic site. No new features; correctness, safety and robustness only.
+* FIX (upgrade safety): the object-cache, advanced-cache and wp-config drop-ins are now written ATOMICALLY (temp file + rename + opcache invalidation), preserving permissions and symlinks. An in-place write could be read half-formed by a concurrent request during the post-update drop-in regeneration → site-wide white screen. This closes that window.
+* FIX (privacy): password-protected posts (wp-postpass_) and commenter "awaiting moderation" views (comment_author_) are no longer cached publicly — a hardcoded always-excluded cookie list now applies regardless of configuration.
+* FIX: the "Skip wizard" button no longer wiped every setting (including the master switch) — it only dismisses now; the settings save handler rejects empty/non-form payloads.
+* FIX: a cached API token now records its expiry, so a purge/warm no longer re-authenticates on every call (which could trip the circuit breaker); Retry-After now accepts the HTTP-date form.
+* FIX: surrogate-key purges are sanitize_key-normalised to match the emitted keys (mixed-case menu/taxonomy ids now invalidate); REST responses no longer cache errors and always carry a purgeable key; language-varied page-cache entries are now purged (best-effort by configured languages; keep Vary-by-language off for URL-based i18n).
+* FIX (Used CSS / Combine — opt-in features): the Used-CSS parser is brace-aware (no longer flattens @media / mangles @keyframes); critical CSS is keyed per section term; Combine respects each stylesheet's media attribute and dependency order, includes the minify flag + version in its cache key, and deregisters combined JS to prevent double execution. Self-hosted Google Fonts now download in the BACKGROUND (never synchronously in <head> — no more first-hit white-screen risk) with atomic writes and a lock.
+* FIX (robustness): HTML output transforms are null-guarded (a PCRE backtrack limit can no longer blank a page); Memcached object-cache long TTLs no longer expire instantly; incr/decr persist; backend detection is memoised per request; page-cache write-latency telemetry only runs during a preload.
+* FIX (preload): an API outage no longer drains the queue and falsely reports "completed"; a cross-process lock prevents the AJAX tick and cron from double-processing; an unreachable origin now gives up ("stalled") instead of rescheduling forever; unpublishing a post no longer warms a fresh 404.
+* FIX (multisite/security): settings cache resets on switch_to_blog; the new-site hook no longer fatals outside wp-admin; network credentials are encrypted at rest; the login limiter no longer trusts spoofable client-IP headers by default; the wizard no longer re-enables Vary-by-device; login max-attempts is floor-clamped; rotated WP salts that make credentials unreadable are now flagged.
+
+= 1.9.0 =
+This release hardens the WordPress object-cache layer and the warm-up, after a full code review. These are the areas that fell short of a mature cache plugin on an editor-heavy site.
+* NEW (object cache is now turnkey): when a live Redis or Memcached backend is detected, the object-cache drop-in is installed automatically (opt-out under TE Cache → Cache → Object cache). After a migration from another cache plugin the logged-in/admin path is no longer left hitting MySQL with no object cache. It never overwrites an object-cache.php from another plugin silently — it flags it and offers a one-click "Replace with ours" (the foreign drop-in is backed up first).
+* FIX (password-protected Redis now reported correctly): on a secured install (Redis with requirepass) where phpredis IS installed but WP_REDIS_PASSWORD is not set, the backend was reported as a bare "Not available" with no hint. The detection now recognises the NOAUTH/WRONGPASS cases in the phpredis path too and tells you to add WP_REDIS_PASSWORD to wp-config.php; a configured-but-down Redis is reported as "not answering" rather than "extension not installed". See the new Object cache section in the readme. Documented the required WP_REDIS_* constants.
+* FIX (our object-cache fixes now actually reach existing installs): the object-cache drop-in is a self-contained copy, so it did NOT update when the plugin updated — a site that enabled it on an older version kept running the old, buggy drop-in until it was manually re-enabled. The drop-in now carries a version stamp and is regenerated automatically on plugin upgrade when it is ours and out of date.
+* FIX (the dashboard no longer reports a dead cache as healthy): if the object-cache backend went down, the drop-in fell back to a per-request array that is not persistent but kept counting "hits", so the panel looked alive while nothing was cached between requests. Degradation is now detected with a live backend check and shown honestly ("Not persistent — recomputing against the database on every request"); a backend blocked by a foreign drop-in is shown as "Blocked".
+* FIX (APCu drop-in hardened to match Redis/Memcached): the APCu object cache used an unsalted prefix, so two installs in one PHP-FPM pool collided, and its flush cleared the entire APCu pool rather than only its own entries. It now salts keys per install and flushes only its own namespace (APCUIterator).
+* NEW (warm-up builds its URL list locally and in priority order): the preload now assembles URLs directly from WordPress — home, then the busiest section archives, then the most-recent content — instead of fetching the sitemap over HTTP. This avoids the origin-to-CDN-and-back hairpin and warms the pages that matter first. The sitemap-over-HTTP path remains as an automatic fallback for headless/decoupled front ends. Filters: flavor_edge_preload_terms, flavor_edge_preload_recent_posts, flavor_edge_preload_urls, flavor_edge_preload_local_min.
+* NEW (editorial write controls, opt-in): optional limits on stored revisions (wp_revisions_to_keep) and autosave interval (AUTOSAVE_INTERVAL), under TE Cache → Cache → Editorial write load. Off by default; every autosave and revision is a database write on the logged-in path that no cache absorbs, so an editor-heavy site can throttle it without editing wp-config.php. It never overrides an AUTOSAVE_INTERVAL already set in wp-config.php.
+* On deactivation the plugin now removes its own object-cache and page-cache drop-ins, so a disabled plugin never leaves a live drop-in behind.
+
+= 1.8.1 =
+* FIX (sitemap preload returned "no URLs found"): the sitemap/preload HTTP requests now force HTTP/1.1. WordPress' wp_remote_get defaults to HTTP/1.0, which a CDN edge can silently drop over IPv4 (TCP/TLS connect, then 0 bytes after the GET), so the fetch timed out and the preload reported an empty sitemap. Applied to the sitemap fetch, the sub-sitemap fetch, the origin health probe and the HTTP warm fallback.
+* FIX (large Yoast sitemaps): a sitemap index with many child sitemaps (e.g. 50+ post-sitemapN.xml) was fetched in full inside one AJAX request and timed out. The preload now stops fetching children as soon as it has enough URLs for the cap (flavor_edge_preload_max_urls).
+* FIX (preload warmed nothing behind a CDN): a per-URL gethostbyname + private-IP check rejected every sitemap URL when the origin resolves its own hostname to a private IP (common for hairpin avoidance). Removed — the same-host match already bounds the preload to the site's own URLs, so the check was redundant and harmful.
+* A candidate URL is now treated as a sitemap only when the body actually contains <sitemapindex> or <urlset>, not on any HTTP 200 (e.g. a 200 HTML page). Sitemap fetch timeout is filterable (flavor_edge_preload_sitemap_timeout, default 20s).
 
 = 1.8.0 =
 * NEW (adaptive warm-up pacing): the sitemap preload now auto-tunes its throughput to what the origin can take, instead of a fixed rate. It grows the batch size while the origin answers fast and the page-cache disk has headroom, and halves it on a platform rate limit, a slow origin, or a near-full disk (AIMD). On a strong origin a bulk warm of thousands of URLs finishes in a fraction of the time; on a weak one it stays slow and safe by itself. The guardrails are unchanged — it only moves within them. Toggle under TE Cache → Cache → Adaptive pacing.

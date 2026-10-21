@@ -24,6 +24,14 @@ class TE_Settings {
 	private static $settings = null;
 
 	/**
+	 * Whether runtime hooks have already been registered (guards against
+	 * double-registration). (T2.11)
+	 *
+	 * @var bool
+	 */
+	private static $hooks_registered = false;
+
+	/**
 	 * Return default settings.
 	 *
 	 * @return array
@@ -58,6 +66,7 @@ class TE_Settings {
 			// WordPress boots, so a CDN miss does NOT regenerate WordPress.
 			'page_cache_enabled'    => false,
 			'page_cache_backend'    => 'disk',   // 'disk' | 'redis' | 'memcached'.
+			'object_cache_auto'     => true,     // auto-install the object-cache drop-in when a live memory backend exists.
 			'page_cache_ttl'        => 300,      // seconds; fallback store for edge misses.
 			'static_s_maxage'       => 2592000,  // 30 days in Varnish.
 			'static_max_age'        => 86400,    // 1 day in browser.
@@ -131,6 +140,11 @@ class TE_Settings {
 			'heartbeat_disable_editor' => false,       // Disable in post editor (risky).
 			'heartbeat_interval'       => 60,          // Seconds (15-120). Default WP is 15-60.
 
+			// Editorial write controls (opt-in; off = WordPress defaults untouched).
+			'editorial_tune'       => false,       // Master opt-in for the two controls below.
+			'editorial_revisions'  => -1,          // -1 leave alone, 0 off, N keep N revisions.
+			'editorial_autosave'   => 0,           // 0 leave WP default (60s), else seconds (clamped 60-600).
+
 			// Speculation Rules.
 			'speculation_enabled'    => false,           // Default off for upgrades; on for new installs via wizard.
 			'speculation_mode'       => 'balanced',      // 'conservative', 'balanced', 'aggressive'.
@@ -185,6 +199,30 @@ class TE_Settings {
 	const ENC_PREFIX = 'enc:';
 
 	/**
+	 * Register runtime hooks once. On multisite, the memoized $settings cache
+	 * belongs to one blog; switch_to_blog()/restore_current_blog() must reset it
+	 * so the next get_all() reloads the active blog's settings. (T2.11)
+	 */
+	public static function init() {
+		if ( self::$hooks_registered ) {
+			return;
+		}
+		self::$hooks_registered = true;
+
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+			add_action( 'switch_blog', array( __CLASS__, 'flush_cache' ) );
+		}
+	}
+
+	/**
+	 * Flush the in-memory settings cache so the next get_all() reloads from the
+	 * database. Hooked to switch_blog on multisite. (T2.11)
+	 */
+	public static function flush_cache() {
+		self::$settings = null;
+	}
+
+	/**
 	 * Get all settings.
 	 *
 	 * @param bool $force_refresh Force reload from database.
@@ -196,17 +234,35 @@ class TE_Settings {
 			self::$settings = wp_parse_args( $saved, self::defaults() );
 
 			// Decrypt credentials in memory, auto-migrate unencrypted values.
-			$needs_save = false;
+			$needs_save       = false;
+			$creds_unreadable = false;
 			foreach ( self::ENCRYPTED_FIELDS as $field ) {
 				if ( ! empty( self::$settings[ $field ] ) ) {
 					if ( 0 === strpos( self::$settings[ $field ], self::ENC_PREFIX ) ) {
 						// Encrypted — decrypt for runtime use.
-						self::$settings[ $field ] = self::decrypt( self::$settings[ $field ] );
+						$decrypted = self::decrypt( self::$settings[ $field ] );
+						// (T2.16) An encrypted credential that decrypts to '' means the
+						// WP salts changed (AUTH_KEY/SECURE_AUTH_SALT rotated); the plugin
+						// would otherwise lose its connection silently. Flag it so an
+						// admin notice (rendered elsewhere) can warn about it.
+						if ( '' === $decrypted ) {
+							$creds_unreadable = true;
+						}
+						self::$settings[ $field ] = $decrypted;
 					} else {
 						// Legacy plaintext — flag for migration.
 						$needs_save = true;
 					}
 				}
+			}
+
+			// (T2.16) Surface or clear the "credentials unreadable" flag, only when it
+			// actually changes, to avoid needless option writes on every load.
+			$flag_set = (bool) get_option( 'flavor_edge_creds_unreadable' );
+			if ( $creds_unreadable && ! $flag_set ) {
+				update_option( 'flavor_edge_creds_unreadable', true );
+			} elseif ( ! $creds_unreadable && $flag_set ) {
+				delete_option( 'flavor_edge_creds_unreadable' );
 			}
 
 			// Auto-encrypt legacy plaintext credentials.
@@ -263,6 +319,10 @@ class TE_Settings {
 		}
 
 		update_option( self::OPTION_KEY, $to_store );
+
+		// (T2.16) Credentials were just (re)written with the current encryption key,
+		// so they are readable again — clear any stale "unreadable" flag.
+		delete_option( 'flavor_edge_creds_unreadable' );
 	}
 
 	/**
@@ -347,6 +407,32 @@ class TE_Settings {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Public wrapper around encrypt() so sibling modules (e.g. TE_Multisite) can
+	 * protect credentials with the exact same scheme. (T2.13)
+	 *
+	 * @param string $plaintext Value to encrypt.
+	 * @return string Encrypted value with ENC_PREFIX, or original on failure.
+	 */
+	public static function encrypt_value( $plaintext ) {
+		// Idempotent: never double-encrypt a value that is already encrypted (a
+		// network-settings form may resubmit the stored, already-prefixed value).
+		if ( is_string( $plaintext ) && 0 === strpos( $plaintext, self::ENC_PREFIX ) ) {
+			return $plaintext;
+		}
+		return self::encrypt( $plaintext );
+	}
+
+	/**
+	 * Public wrapper around decrypt(). Returns '' on failure. (T2.13)
+	 *
+	 * @param string $stored Encrypted value with ENC_PREFIX.
+	 * @return string Decrypted plaintext.
+	 */
+	public static function decrypt_value( $stored ) {
+		return self::decrypt( $stored );
+	}
+
+	/**
 	 * Encrypt a value for storage.
 	 *
 	 * @param string $plaintext Value to encrypt.
@@ -408,3 +494,6 @@ class TE_Settings {
 		return hash( 'sha256', $material, true ); // 32 bytes for AES-256.
 	}
 }
+
+// Register the multisite settings-cache flush hook once at load. (T2.11)
+TE_Settings::init();

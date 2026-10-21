@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.8.0
+ * Version:           1.9.1
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.8.0' );
+define( 'FLAVOR_EDGE_VERSION', '1.9.1' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -74,6 +74,11 @@ function flavor_edge_init() {
 		update_option( 'flavor_edge_version', FLAVOR_EDGE_VERSION );
 		if ( class_exists( 'flavor_edge\\TE_Minify' ) ) {
 			\flavor_edge\TE_Minify::clear_cache();
+		}
+		// The object-cache.php drop-in is self-contained, so fixes shipped in this
+		// version do not reach an already-installed drop-in until it is rewritten.
+		if ( class_exists( 'flavor_edge\\TE_ObjectCache' ) ) {
+			\flavor_edge\TE_ObjectCache::maybe_upgrade_dropin();
 		}
 		// Clear minify dir directly as fallback.
 		$cache_dir = WP_CONTENT_DIR . '/cache/flavor-edge/min';
@@ -225,6 +230,12 @@ function flavor_edge_activate_single() {
 		\flavor_edge\TE_Hardening::protect_uploads();
 	}
 
+	// Turnkey object cache: install the drop-in now if a live memory backend is
+	// available and nothing foreign is in the way (respects the opt-out setting).
+	if ( class_exists( 'flavor_edge\\TE_ObjectCache' ) ) {
+		\flavor_edge\TE_ObjectCache::maybe_auto_enable( true );
+	}
+
 	// Flush rewrite rules.
 	flush_rewrite_rules();
 }
@@ -336,6 +347,16 @@ function flavor_edge_deactivate_single() {
 		\flavor_edge\TE_BrowserCache::remove_htaccess();
 	}
 
+	// Remove our self-contained drop-ins so they do not keep running without the
+	// plugin. object-cache.php is fully self-contained; advanced-cache.php loads
+	// the plugin's store, but a deactivated plugin should not keep serving cache.
+	if ( class_exists( 'flavor_edge\\TE_ObjectCache' ) ) {
+		\flavor_edge\TE_ObjectCache::remove_dropin();
+	}
+	if ( class_exists( 'flavor_edge\\TE_PageCache' ) ) {
+		\flavor_edge\TE_PageCache::disable();
+	}
+
 	flush_rewrite_rules();
 }
 register_deactivation_hook( __FILE__, 'flavor_edge_deactivate' );
@@ -344,6 +365,12 @@ register_deactivation_hook( __FILE__, 'flavor_edge_deactivate' );
  * When a new site is created in a multisite network, run activation.
  */
 add_action( 'wp_initialize_site', function( $site ) {
+	// (T2.12) is_plugin_active_for_network() lives in wp-admin/includes/plugin.php,
+	// which is NOT loaded on front-end / WP-CLI / REST site creation. Load it on
+	// demand so a subsite created outside wp-admin does not fatal here.
+	if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
 	if ( ! is_plugin_active_for_network( FLAVOR_EDGE_BASENAME ) ) {
 		return;
 	}

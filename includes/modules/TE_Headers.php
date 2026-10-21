@@ -170,6 +170,16 @@ class TE_Headers {
 			return;
 		}
 
+		// Never cache a server error at the edge: a transient 5xx (e.g. a 503 from a
+		// maintenance plugin, or an upstream blip) would otherwise be pinned for the
+		// full s-maxage — up to 48h by default — taking the page down long after it
+		// recovered. On a news site that is a hard outage.
+		$http_status = function_exists( 'http_response_code' ) ? (int) http_response_code() : 200;
+		if ( $http_status >= 500 ) {
+			self::send_nocache_headers();
+			return;
+		}
+
 		$settings = TE_Settings::get_all();
 
 		// Cache-Control: resolve the per-template TTL profile (the homepage can
@@ -397,19 +407,32 @@ VCL;
 	public static function add_rest_headers( $response, $server, $request ) {
 		$settings = TE_Settings::get_all();
 
-		if ( $request->get_method() === 'GET' && ! is_user_logged_in() ) {
-			$response->header(
-				'Cache-Control',
-				sprintf( 'public, max-age=%d, s-maxage=%d', $settings['html_max_age'], $settings['html_s_maxage'] )
-			);
-
-			// Add post-specific surrogate keys for single post endpoints.
-			$route = $request->get_route();
-			if ( preg_match( '#/wp/v2/(?:posts|pages)/(\d+)#', $route, $matches ) ) {
-				$keys = array( 'post-' . $matches[1], 'site-' . get_current_blog_id() );
-				$response->header( 'Surrogate-Keys', implode( ' ', $keys ) );
-			}
+		if ( 'GET' !== $request->get_method() || is_user_logged_in() ) {
+			return $response;
 		}
+
+		// Never cache REST errors at the edge: a transient 4xx/5xx would otherwise be
+		// pinned for the whole s-maxage window.
+		$status = (int) $response->get_status();
+		if ( $status >= 400 ) {
+			$response->header( 'Cache-Control', 'no-cache, no-store, must-revalidate' );
+			return $response;
+		}
+
+		$response->header(
+			'Cache-Control',
+			sprintf( 'public, max-age=%d, s-maxage=%d', $settings['html_max_age'], $settings['html_s_maxage'] )
+		);
+
+		// Always attach at least a site-level surrogate key so the response is
+		// purgeable (a full-site purge clears it, instead of it riding the TTL);
+		// add a post-specific key for single post/page endpoints.
+		$keys  = array( 'site-' . get_current_blog_id() );
+		$route = $request->get_route();
+		if ( preg_match( '#/wp/v2/(?:posts|pages)/(\d+)#', $route, $matches ) ) {
+			$keys[] = 'post-' . $matches[1];
+		}
+		$response->header( 'Surrogate-Keys', implode( ' ', array_map( 'sanitize_key', $keys ) ) );
 
 		return $response;
 	}
@@ -461,6 +484,25 @@ VCL;
 		// WP customizer preview.
 		if ( is_customize_preview() ) {
 			return true;
+		}
+
+		// Always-uncacheable cookies: WordPress's own privacy-sensitive cookies,
+		// checked regardless of the admin's excluded_cookies list. Without this a
+		// password-protected post (wp-postpass_*) or a commenter's "awaiting
+		// moderation" view (comment_author_*) would be stamped public and served
+		// to everyone. Prefix match on the cookie name.
+		if ( ! empty( $_COOKIE ) ) {
+			$always = apply_filters(
+				'flavor_edge_always_excluded_cookies',
+				array( 'wp-postpass_', 'comment_author_', 'wp_woocommerce_session_', 'woocommerce_cart_hash', 'wordpress_logged_in_', 'wordpress_sec_' )
+			);
+			foreach ( array_keys( $_COOKIE ) as $cookie_name ) {
+				foreach ( $always as $prefix ) {
+					if ( '' !== $prefix && 0 === strpos( $cookie_name, (string) $prefix ) ) {
+						return true;
+					}
+				}
+			}
 		}
 
 		// Check excluded cookies.

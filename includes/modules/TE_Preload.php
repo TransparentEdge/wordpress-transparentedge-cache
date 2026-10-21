@@ -25,9 +25,12 @@ defined( 'ABSPATH' ) || exit;
 class TE_Preload {
 
 	const STATUS_KEY = 'flavor_edge_preload_status';
+	const LOCK_KEY = 'flavor_edge_preload_lock'; // FIX 2 (T2.9): cross-process batch lock.
 	const BATCH_SIZE = 3;
 	const BATCH_DELAY = 2;
 	const MAX_URLS = 500;
+	const LOCK_TTL = 30;      // FIX 2 (T2.9): seconds a batch lock stays valid; a stale lock auto-expires so a crash never wedges the warm.
+	const STALL_LIMIT = 30;   // FIX 3 (T2.10): consecutive no-progress cycles before an unattended warm gives up (filterable).
 
 	/**
 	 * Initialize preload hooks.
@@ -64,12 +67,12 @@ class TE_Preload {
 	 * @return array
 	 */
 	public static function start( $unattended = false ) {
-		$urls = self::get_urls_from_sitemap();
+		$urls = self::get_urls();
 
 		if ( empty( $urls ) ) {
 			return array(
 				'success' => false,
-				'message' => __( 'No URLs found in sitemap.', 'flavor-edge-cache' ),
+				'message' => __( 'No URLs found to preload.', 'flavor-edge-cache' ),
 				'urls'    => 0,
 			);
 		}
@@ -89,6 +92,7 @@ class TE_Preload {
 			'batch_size'  => self::BATCH_SIZE, // adaptive pacer ramps this up/down.
 			'lat_base'    => 0.0,              // origin baseline latency the pacer tunes against.
 			'write_base'  => 0.0,              // page-cache write baseline the pacer also tunes against.
+			'no_progress' => 0,                // FIX 3 (T2.10): consecutive no-progress cycles → give up at STALL_LIMIT.
 		);
 
 		update_option( self::STATUS_KEY, $status, false );
@@ -166,9 +170,18 @@ class TE_Preload {
 			return;
 		}
 
+		// FIX 2 (T2.9): take the cross-process lock so this admin tick and the
+		// WP-Cron fallback can't warm/splice the same batch at once (double work,
+		// double-counted telemetry). Held and fresh → skip, just report status.
+		if ( ! self::acquire_lock() ) {
+			wp_send_json_success( $status );
+			return;
+		}
+
 		// Process one batch.
 		$status = self::do_batch( $status );
 		$status = self::persist_progress( $status );
+		self::release_lock();
 
 		// Keep cron scheduled as fallback.
 		if ( 'running' === $status['status'] && ! wp_next_scheduled( 'flavor_edge_preload_batch' ) ) {
@@ -188,8 +201,15 @@ class TE_Preload {
 			return;
 		}
 
+		// FIX 2 (T2.9): same cross-process lock as the AJAX tick — if the admin
+		// tick is mid-batch, skip this cron run rather than double-process.
+		if ( ! self::acquire_lock() ) {
+			return;
+		}
+
 		$status = self::do_batch( $status );
 		$status = self::persist_progress( $status );
+		self::release_lock();
 
 		if ( 'running' === $status['status'] && ! empty( $status['remaining'] ) ) {
 			wp_schedule_single_event( time() + self::next_delay( $status ) + 1, 'flavor_edge_preload_batch' );
@@ -234,7 +254,9 @@ class TE_Preload {
 			if ( $autotune ) {
 				$status['batch_size'] = 1;
 			}
-			return $status;
+			// FIX 3 (T2.10): a gated-off unhealthy origin is a no-progress cycle —
+			// count it so a permanently down/unreachable origin eventually stalls.
+			return self::mark_no_progress( $status );
 		}
 
 		// Disk GATE (guardrail): warming a URL also WRITES its page-cache entry,
@@ -249,7 +271,9 @@ class TE_Preload {
 			if ( $autotune ) {
 				$status['batch_size'] = 1;
 			}
-			return $status;
+			// FIX 3 (T2.10): a persistently near-full disk also stalls progress —
+			// count it toward give-up so the warm cannot reschedule forever.
+			return self::mark_no_progress( $status );
 		}
 
 		// Adaptive batch size, always clamped by the guardrails above.
@@ -257,7 +281,8 @@ class TE_Preload {
 			? max( 1, (int) ( isset( $status['batch_size'] ) ? $status['batch_size'] : self::BATCH_SIZE ) )
 			: self::BATCH_SIZE;
 
-		$batch = array_splice( $status['remaining'], 0, $bs );
+		$batch       = array_splice( $status['remaining'], 0, $bs );
+		$batch_count = count( $batch );
 
 		// One platform call warms the whole batch across all nodes.
 		$method = TE_Settings::get( 'preload_method' );
@@ -267,44 +292,61 @@ class TE_Preload {
 			$result = TE_Api::purge_urls( $batch, true, true ); // soft purge + aggregated refetch.
 		}
 
-		$status['processed'] += count( $batch );
-		$status['last_batch']  = time();
-		$status['waiting']     = '';
+		$status['last_batch'] = time();
+		$status['waiting']    = '';
 
-		if ( empty( $result['success'] ) ) {
-			$status['errors'] += count( $batch );
-			$code = (int) ( isset( $result['status'] ) ? $result['status'] : 0 );
-			// Rate limited / platform busy → requeue the batch and back off.
+		$success = ! empty( $result['success'] );
+		$code    = (int) ( isset( $result['status'] ) ? $result['status'] : 0 );
+
+		// The warm endpoint reports partially-invalid URLs with 206 (mapped to
+		// success), NEVER a per-URL 4xx. So any non-success here is an API-level
+		// problem (token/creds 401/403, wrong company id 404, bad payload 400, rate
+		// limit 429/503, 5xx, or a connection/no-token error) and is transient for
+		// warming: keep the batch queued and retry; repeated failures escalate to
+		// 'stalled' instead of silently dropping warm batches as cold.
+		if ( ! $success ) {
+			// Keep the batch: push it back to the front of the queue, back off, and
+			// record the no-progress cycle (FIX 3 turns repeated ones into 'stalled').
+			$status['remaining'] = array_merge( $batch, $status['remaining'] );
+			$status['backoff']   = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
 			if ( 429 === $code || 503 === $code ) {
-				$status['backoff']     = min( (int) ( isset( $status['backoff'] ) ? $status['backoff'] : 0 ) + 1, 6 );
 				$status['retry_after'] = (int) ( isset( $result['retry_after'] ) ? $result['retry_after'] : 0 );
-				$status['remaining']   = array_merge( $batch, $status['remaining'] );
-				if ( $autotune ) {
-					$status['batch_size'] = max( 1, (int) floor( $bs / 2 ) ); // multiplicative decrease.
-				}
 			}
-		} else {
-			$status['backoff']     = 0;
-			$status['retry_after'] = 0;
 			if ( $autotune ) {
-				// Two degradation signals, each against its own best-case baseline:
-				// origin regen latency AND page-cache write latency (the warm writes
-				// every entry to the cache disk/backend, so that cost is real too).
-				$origin_lat = isset( $probe['latency'] ) ? (float) $probe['latency'] : 0.0;
-				$write_lat  = TE_PageCache::write_latency_ms();
-
-				$origin_base = self::track_baseline( isset( $status['lat_base'] ) ? (float) $status['lat_base'] : 0.0, $origin_lat );
-				$write_base  = self::track_baseline( isset( $status['write_base'] ) ? (float) $status['write_base'] : 0.0, $write_lat );
-
-				$status['batch_size'] = self::tune_batch_size(
-					$bs,
-					self::degrade_ratio( $origin_lat, $origin_base ),
-					self::degrade_ratio( $write_lat, $write_base ),
-					$disk
-				);
-				$status['lat_base']   = $origin_base;
-				$status['write_base'] = $write_base;
+				$status['batch_size'] = max( 1, (int) floor( $bs / 2 ) ); // multiplicative decrease.
 			}
+			return self::mark_no_progress( $status );
+		}
+
+		// Batch warmed (only a success reaches here — every failure returned above).
+		// Consume it, clamped (FIX 1) so processed can never exceed total and the
+		// admin UI can never show >100%.
+		$status['processed']   = min( (int) $status['total'], (int) $status['processed'] + $batch_count );
+		$status['no_progress'] = 0; // FIX 3 (T2.10): real forward progress → reset the give-up counter.
+
+		// Warmed successfully → the infrastructure is healthy, clear backoff and let
+		// the pacer ramp.
+		$status['backoff']     = 0;
+		$status['retry_after'] = 0;
+
+		if ( $success && $autotune ) {
+			// Two degradation signals, each against its own best-case baseline:
+			// origin regen latency AND page-cache write latency (the warm writes
+			// every entry to the cache disk/backend, so that cost is real too).
+			$origin_lat = isset( $probe['latency'] ) ? (float) $probe['latency'] : 0.0;
+			$write_lat  = TE_PageCache::write_latency_ms();
+
+			$origin_base = self::track_baseline( isset( $status['lat_base'] ) ? (float) $status['lat_base'] : 0.0, $origin_lat );
+			$write_base  = self::track_baseline( isset( $status['write_base'] ) ? (float) $status['write_base'] : 0.0, $write_lat );
+
+			$status['batch_size'] = self::tune_batch_size(
+				$bs,
+				self::degrade_ratio( $origin_lat, $origin_base ),
+				self::degrade_ratio( $write_lat, $write_base ),
+				$disk
+			);
+			$status['lat_base']   = $origin_base;
+			$status['write_base'] = $write_base;
 		}
 
 		if ( empty( $status['remaining'] ) ) {
@@ -315,6 +357,65 @@ class TE_Preload {
 		}
 
 		return $status;
+	}
+
+	/**
+	 * FIX 3 (T2.10): record one no-progress / paused cycle and, once too many pile
+	 * up in a row, give up — set status 'stalled' and clear the scheduled batch
+	 * cron so an unattended warm against a permanently unhealthy/unreachable origin
+	 * (loopback blocked, persistent 5xx, disk wedged) can never reschedule forever.
+	 * The counter is reset to 0 in do_batch() whenever real progress is made.
+	 *
+	 * @param array $status In-memory status.
+	 * @return array Updated status (possibly 'stalled').
+	 */
+	private static function mark_no_progress( $status ) {
+		$status['no_progress'] = (int) ( isset( $status['no_progress'] ) ? $status['no_progress'] : 0 ) + 1;
+		$limit = (int) apply_filters( 'flavor_edge_preload_max_stall', self::STALL_LIMIT );
+		if ( $limit > 0 && $status['no_progress'] >= $limit ) {
+			$status['status']   = 'stalled';
+			$status['waiting']  = '';
+			$status['finished'] = time();
+			$status['elapsed']  = $status['finished'] - (int) $status['started'];
+			wp_clear_scheduled_hook( 'flavor_edge_preload_batch' );
+		}
+		return $status;
+	}
+
+	/**
+	 * FIX 2 (T2.9): acquire a short-lived cross-process lock so the AJAX tick and
+	 * the WP-Cron fallback cannot warm/splice the same batch at the same time
+	 * (double work + double-counted telemetry). Idiomatic get_option/update_option
+	 * with a unique-token read-back so the loser of a concurrent race backs off. A
+	 * fresh lock (< LOCK_TTL) is left alone; a stale one is reclaimed, so a crash
+	 * mid-batch auto-expires instead of wedging the preload forever.
+	 *
+	 * @return bool True if this process now holds the lock.
+	 */
+	private static function acquire_lock() {
+		$ttl  = (int) apply_filters( 'flavor_edge_preload_lock_ttl', self::LOCK_TTL );
+		$now  = time();
+		$lock = get_option( self::LOCK_KEY, null );
+
+		// Someone else holds a fresh lock → do not touch it, skip this tick.
+		if ( is_array( $lock ) && isset( $lock['t'] ) && ( $now - (int) $lock['t'] ) < $ttl ) {
+			return false;
+		}
+
+		// Free or stale: claim it with a unique token, then read back to confirm we
+		// won any concurrent race (last writer wins; only that writer proceeds).
+		$token = uniqid( '', true );
+		update_option( self::LOCK_KEY, array( 't' => $now, 'id' => $token ), false );
+
+		$check = get_option( self::LOCK_KEY, null );
+		return ( is_array( $check ) && isset( $check['id'] ) && $check['id'] === $token );
+	}
+
+	/**
+	 * FIX 2 (T2.9): release the cross-process batch lock held by acquire_lock().
+	 */
+	private static function release_lock() {
+		delete_option( self::LOCK_KEY );
 	}
 
 	/**
@@ -424,6 +525,7 @@ class TE_Preload {
 		$start = microtime( true );
 		$resp  = wp_remote_get( $probe_url, array(
 			'timeout'     => $timeout,
+			'httpversion' => '1.1', // WP defaults to HTTP/1.0, which the edge can drop over IPv4.
 			'blocking'    => true,
 			'redirection' => 0,
 			'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
@@ -531,6 +633,135 @@ class TE_Preload {
 	}
 
 	/**
+	 * Build the preload URL set.
+	 *
+	 * Prefers a LOCAL, prioritised build (home → section archives → most-recent
+	 * posts) assembled from WordPress itself — no HTTP, so it never hairpins out
+	 * to the CDN and back to the origin, and the busiest URLs are warmed first
+	 * instead of "whatever the sitemap lists first". The sitemap-over-HTTP path
+	 * stays as a fallback for decoupled/headless front ends or sites whose URLs
+	 * do not come out of the standard WP queries.
+	 *
+	 * @return array
+	 */
+	public static function get_urls() {
+		$max = max( 1, (int) apply_filters( 'flavor_edge_preload_max_urls', self::MAX_URLS ) );
+
+		$urls = self::build_local_urls( $max );
+
+		// Only reach for the sitemap (HTTP, hairpin-prone) if the local build came
+		// up short AND did not even fill the cap — e.g. a headless front end or
+		// content outside WP's own queries. A deliberately tiny cap is not "short".
+		$min = (int) apply_filters( 'flavor_edge_preload_local_min', 5 );
+		if ( count( $urls ) < $min && count( $urls ) < $max ) {
+			$sitemap = self::get_urls_from_sitemap();
+			if ( count( $sitemap ) > count( $urls ) ) {
+				// Keep local priority order first, then top up from the sitemap.
+				$urls = array_slice( array_values( array_unique( array_merge( $urls, $sitemap ) ) ), 0, $max );
+			}
+		}
+
+		/**
+		 * Filter the final preload URL list (after local build + sitemap fallback).
+		 *
+		 * @param array $urls Ordered, de-duplicated, capped URL list.
+		 */
+		return apply_filters( 'flavor_edge_preload_urls', $urls );
+	}
+
+	/**
+	 * Assemble the preload URLs locally, in warm-priority order, from WordPress.
+	 *
+	 * Order: home / front page → posts page → busiest public term archives →
+	 * most-recent published content. No network calls.
+	 *
+	 * @param int $max Hard cap on the number of URLs.
+	 * @return array
+	 */
+	private static function build_local_urls( $max ) {
+		$urls = array();
+		$push = function ( $u ) use ( &$urls, $max ) {
+			if ( ! is_string( $u ) || '' === $u ) {
+				return;
+			}
+			$u = strtok( $u, '#' ); // Drop fragments; they are never separate cache entries.
+			if ( count( $urls ) < $max && ! in_array( $u, $urls, true ) ) {
+				$urls[] = $u;
+			}
+		};
+
+		// 1. Home.
+		$push( home_url( '/' ) );
+
+		// 2. Static front page + blog posts page, when configured that way.
+		if ( 'page' === get_option( 'show_on_front' ) ) {
+			$pf = (int) get_option( 'page_on_front' );
+			$pp = (int) get_option( 'page_for_posts' );
+			if ( $pf ) {
+				$push( get_permalink( $pf ) );
+			}
+			if ( $pp ) {
+				$push( get_permalink( $pp ) );
+			}
+		}
+
+		// 3. Section archives — busiest public term pages first (categories, etc.).
+		$term_cap = (int) apply_filters( 'flavor_edge_preload_terms', 40 );
+		if ( $term_cap > 0 && count( $urls ) < $max ) {
+			$taxes = get_taxonomies( array( 'public' => true ), 'names' );
+			unset( $taxes['post_format'] ); // Formats are not sections.
+			if ( ! empty( $taxes ) ) {
+				$terms = get_terms( array(
+					'taxonomy'   => array_values( $taxes ),
+					'orderby'    => 'count',
+					'order'      => 'DESC',
+					'number'     => $term_cap,
+					'hide_empty' => true,
+				) );
+				if ( ! is_wp_error( $terms ) ) {
+					foreach ( $terms as $term ) {
+						$link = get_term_link( $term );
+						if ( ! is_wp_error( $link ) ) {
+							$push( $link );
+						}
+						if ( count( $urls ) >= $max ) {
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		// 4. Most-recent published content across public post types (posts, pages, CPTs).
+		if ( count( $urls ) < $max ) {
+			$types = get_post_types( array( 'public' => true ), 'names' );
+			unset( $types['attachment'] );
+			$recent = (int) apply_filters( 'flavor_edge_preload_recent_posts', $max );
+			$query  = new \WP_Query( array(
+				'post_type'           => array_values( $types ),
+				'post_status'         => 'publish',
+				'posts_per_page'      => max( 1, min( $recent, $max ) ),
+				'orderby'             => 'date',
+				'order'               => 'DESC',
+				'ignore_sticky_posts' => true,
+				'no_found_rows'       => true,
+				// Default fields (not 'ids') so WP primes the post cache in one query;
+				// get_permalink() below then hits that cache instead of one query per URL.
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			) );
+			foreach ( $query->posts as $post ) {
+				$push( get_permalink( $post ) );
+				if ( count( $urls ) >= $max ) {
+					break;
+				}
+			}
+		}
+
+		return array_slice( $urls, 0, $max );
+	}
+
+	/**
 	 * Extract URLs from the site's sitemap.
 	 *
 	 * @return array
@@ -545,10 +776,13 @@ class TE_Preload {
 			home_url( '/?sitemap=1' ),
 		);
 
+		$timeout = (int) apply_filters( 'flavor_edge_preload_sitemap_timeout', 20 );
+
 		$body = '';
 		foreach ( $sitemap_urls as $candidate ) {
 			$response = wp_remote_get( $candidate, array(
-				'timeout'     => 10,
+				'timeout'     => $timeout,
+				'httpversion' => '1.1', // WP defaults to HTTP/1.0; the TE edge can drop it over IPv4 → timeout → "no URLs".
 				'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 				'redirection' => 3,
 			) );
@@ -557,12 +791,12 @@ class TE_Preload {
 				continue;
 			}
 
-			$code      = wp_remote_retrieve_response_code( $response );
 			$resp_body = wp_remote_retrieve_body( $response );
 
-			if ( 200 === $code
-				|| ( ! empty( $resp_body ) && false !== strpos( $resp_body, '<sitemapindex' ) )
-				|| ( ! empty( $resp_body ) && false !== strpos( $resp_body, '<urlset' ) ) ) {
+			// Accept only an ACTUAL sitemap, not any HTTP 200: /wp-sitemap.xml may 301
+			// to the Yoast index, and a themed 200 HTML page is not a sitemap.
+			if ( ! empty( $resp_body )
+				&& ( false !== strpos( $resp_body, '<sitemapindex' ) || false !== strpos( $resp_body, '<urlset' ) ) ) {
 				$body = $resp_body;
 				break;
 			}
@@ -572,11 +806,17 @@ class TE_Preload {
 			return $urls;
 		}
 
+		$max = max( 1, (int) apply_filters( 'flavor_edge_preload_max_urls', self::MAX_URLS ) );
+
 		if ( false !== strpos( $body, '<sitemapindex' ) ) {
+			// A Yoast index can hold 50+ child sitemaps; fetching all of them in one
+			// AJAX request times out (a single child can take seconds). Fetch children
+			// only until we have enough URLs for the cap, then stop.
 			foreach ( self::extract_locs( $body ) as $sub_url ) {
 				$sub = wp_remote_get( $sub_url, array(
-					'timeout'    => 10,
-					'user-agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
+					'timeout'     => $timeout,
+					'httpversion' => '1.1',
+					'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 				) );
 				if ( ! is_wp_error( $sub ) ) {
 					$sub_body = wp_remote_retrieve_body( $sub );
@@ -584,13 +824,15 @@ class TE_Preload {
 						$urls = array_merge( $urls, self::extract_locs( $sub_body ) );
 					}
 				}
+				if ( count( $urls ) >= $max ) {
+					break;
+				}
 			}
 		} else {
 			$urls = self::extract_locs( $body );
 		}
 
-		$max = (int) apply_filters( 'flavor_edge_preload_max_urls', self::MAX_URLS );
-		return array_slice( array_unique( $urls ), 0, max( 1, $max ) );
+		return array_slice( array_unique( $urls ), 0, $max );
 	}
 
 	/**
@@ -611,15 +853,12 @@ class TE_Preload {
 					continue;
 				}
 
-				// SSRF protection: only allow URLs from our own host.
-				$url_host = wp_parse_url( $url, PHP_URL_HOST );
-				if ( $url_host !== $own_host ) {
-					continue;
-				}
-
-				// Block internal/private IP ranges.
-				$ip = gethostbyname( $url_host );
-				if ( $ip !== $url_host && self::is_private_ip( $ip ) ) {
+				// SSRF protection: only allow URLs from our own host. (A per-URL
+				// gethostbyname + private-IP check used to sit here too, but it blocked
+				// EVERY URL on CDN origins that resolve their own hostname to a private
+				// IP for hairpin avoidance — and this host match already bounds us to
+				// our own site, so it was redundant as well as harmful.)
+				if ( wp_parse_url( $url, PHP_URL_HOST ) !== $own_host ) {
 					continue;
 				}
 
@@ -629,17 +868,4 @@ class TE_Preload {
 		return $urls;
 	}
 
-	/**
-	 * Check if an IP address is in a private/reserved range.
-	 *
-	 * @param string $ip IP address.
-	 * @return bool
-	 */
-	private static function is_private_ip( $ip ) {
-		return ! filter_var(
-			$ip,
-			FILTER_VALIDATE_IP,
-			FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
-		);
-	}
 }

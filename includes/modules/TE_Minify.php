@@ -409,7 +409,15 @@ class TE_Minify {
 		$hash_parts = array();
 		$s = TE_Settings::get_all();
 
-		foreach ( $wp_styles->queue as $handle ) {
+		// Iterate in WordPress's dependency-resolved order (not raw enqueue order),
+		// so the combined cascade matches what would otherwise be printed. Compute it
+		// without disturbing $wp_styles' own to_do state.
+		$saved_to_do      = $wp_styles->to_do;
+		$wp_styles->all_deps( $wp_styles->queue );
+		$resolved_handles = $wp_styles->to_do;
+		$wp_styles->to_do = $saved_to_do;
+
+		foreach ( $resolved_handles as $handle ) {
 			if ( ! isset( $wp_styles->registered[ $handle ] ) ) {
 				continue;
 			}
@@ -425,6 +433,13 @@ class TE_Minify {
 
 			// Skip admin styles.
 			if ( false !== strpos( $dep->src, '/wp-admin/' ) ) { continue; }
+
+			// Only combine screen/all stylesheets. A media-specific sheet (print, or
+			// "screen and (max-width…)") must NOT be merged into the all-media bundle,
+			// or its rules would apply in the wrong context (e.g. print resets showing
+			// on screen). WordPress stores the media string in $dep->args.
+			$media = ( isset( $dep->args ) && '' !== $dep->args ) ? $dep->args : 'all';
+			if ( 'all' !== $media && 'screen' !== $media ) { continue; }
 
 			// Capture inline CSS attached via wp_add_inline_style().
 			// It lives in the queue object (extra['after']/['before']), not in the
@@ -452,7 +467,10 @@ class TE_Minify {
 			return; // No point combining 1 file.
 		}
 
-		// Cache key based on handles + versions.
+		// Cache key based on handles + versions. The minify flag and plugin version
+		// must be in the key too: toggling "Minify CSS" or updating the plugin must
+		// produce a new bundle, not keep serving the old file.
+		$hash_parts[] = 'opts:' . (int) $s['minify_css'] . ':' . FLAVOR_EDGE_VERSION;
 		$cache_key = 'combined-css-' . substr( md5( implode( '|', $hash_parts ) ), 0, 12 );
 		$cache_file = self::get_cache_dir() . '/' . $cache_key . '.css';
 		$cache_url  = self::get_cache_url() . '/' . $cache_key . '.css';
@@ -531,7 +549,15 @@ class TE_Minify {
 			}
 		}
 
-		foreach ( $wp_scripts->queue as $handle ) {
+		// Resolve the dependency order (not raw enqueue order), so a footer script
+		// is never concatenated ahead of a dependency it relies on ("X is not
+		// defined"). Compute without disturbing $wp_scripts' own to_do state.
+		$saved_to_do      = $wp_scripts->to_do;
+		$wp_scripts->all_deps( $wp_scripts->queue );
+		$resolved_handles = $wp_scripts->to_do;
+		$wp_scripts->to_do = $saved_to_do;
+
+		foreach ( $resolved_handles as $handle ) {
 			if ( ! isset( $wp_scripts->registered[ $handle ] ) ) {
 				continue;
 			}
@@ -570,10 +596,42 @@ class TE_Minify {
 			$hash_parts[] = $handle . ':' . ( $dep->ver ?: filemtime( $local_path ) );
 		}
 
+		// Never combine a handle that a NON-combined registered script depends on: it
+		// must stay individually loadable, or deregistering it (below) breaks the
+		// dependent, and NOT deregistering double-loads it (standalone + in the
+		// bundle). The dependency resolver only protected exclusion-based deps; this
+		// also covers scripts skipped for other reasons (header group, external, no
+		// src). Remove such handles, re-checking transitively, then rebuild the hash.
+		$removed = true;
+		while ( $removed && ! empty( $to_combine ) ) {
+			$removed      = false;
+			$combined_set = array_flip( array_keys( $to_combine ) );
+			foreach ( $wp_scripts->registered as $other_handle => $other ) {
+				if ( isset( $combined_set[ $other_handle ] ) || empty( $other->deps ) ) {
+					continue;
+				}
+				foreach ( (array) $other->deps as $needed ) {
+					if ( isset( $to_combine[ $needed ] ) ) {
+						unset( $to_combine[ $needed ] );
+						$removed = true;
+					}
+				}
+			}
+		}
+
 		if ( count( $to_combine ) < 2 ) {
 			return;
 		}
 
+		// Rebuild the cache-key hash from the surviving set only.
+		$hash_parts = array();
+		foreach ( $to_combine as $handle => $info ) {
+			$hash_parts[] = $handle . ':' . $info['ver'];
+		}
+
+		// Minify flag + plugin version in the key, so toggling "Minify JS" or a plugin
+		// update produces a fresh bundle instead of serving the stale one.
+		$hash_parts[] = 'opts:' . (int) $s['minify_js'] . ':' . FLAVOR_EDGE_VERSION;
 		$cache_key = 'combined-js-' . substr( md5( implode( '|', $hash_parts ) ), 0, 12 );
 		$cache_file = self::get_cache_dir() . '/' . $cache_key . '.js';
 		$cache_url  = self::get_cache_url() . '/' . $cache_key . '.js';
@@ -614,9 +672,14 @@ class TE_Minify {
 			}
 		}
 
-		// Dequeue originals.
+		// Dequeue AND deregister originals. Dequeuing alone leaves the handle a
+		// resolvable dependency, so a non-combined script that depends on it makes WP
+		// re-add it to the print queue → it loads standalone AND inside the bundle
+		// (double execution). The dependency resolver above has already protected any
+		// handle an excluded script depends on, so deregistering here is safe.
 		foreach ( array_keys( $to_combine ) as $handle ) {
 			wp_dequeue_script( $handle );
+			wp_deregister_script( $handle );
 		}
 
 		// Enqueue combined file.

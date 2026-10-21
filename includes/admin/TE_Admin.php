@@ -22,6 +22,7 @@ class TE_Admin {
 		add_action( 'wp_ajax_flavor_edge_purge_all', array( __CLASS__, 'ajax_purge_all' ) );
 		add_action( 'wp_ajax_flavor_edge_wizard_detect', array( __CLASS__, 'ajax_wizard_detect' ) );
 		add_action( 'wp_ajax_flavor_edge_wizard_apply', array( __CLASS__, 'ajax_wizard_apply' ) );
+		add_action( 'wp_ajax_flavor_edge_wizard_dismiss', array( __CLASS__, 'ajax_wizard_dismiss' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_start', array( __CLASS__, 'ajax_preload_start' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_stop', array( __CLASS__, 'ajax_preload_stop' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_status', array( __CLASS__, 'ajax_preload_status' ) );
@@ -263,7 +264,15 @@ class TE_Admin {
 			wp_send_json_error( 'Unauthorized' );
 		}
 
-		$raw      = $_POST['settings'] ?? array();
+		$raw = $_POST['settings'] ?? array();
+		// Guard against a non-form payload: a scalar would TypeError on the string
+		// offsets below, and an empty array (as the old wizard-skip sent) would reset
+		// every checkbox — including the master switch — to false. A real settings
+		// form always posts its text/number/radio fields, so it is never empty.
+		if ( ! is_array( $raw ) || empty( $raw ) ) {
+			wp_send_json_error( __( 'No settings submitted.', 'flavor-edge-cache' ) );
+		}
+
 		$settings = TE_Settings::get_all();
 
 		// Snapshot for change detection (side effects should only fire on real changes).
@@ -279,11 +288,13 @@ class TE_Admin {
 			'lazyload_images', 'lazyload_iframes', 'preload_lcp', 'selfhost_google_fonts',
 			'woo_exclude_cart', 'woo_exclude_checkout', 'woo_exclude_account', 'woo_purge_stock',
 			'preload_sitemap', 'preload_health_gate', 'preload_offpeak', 'preload_autotune',
+			'object_cache_auto',
+			'editorial_tune',
 			'heartbeat_disable_admin', 'heartbeat_disable_editor',
 			'debug_mode',
 			'speculation_enabled',
 			// WPO v1.5.0
-			'remove_unused_css', 'lazyload_bg_images', 'mobile_cache',
+			'remove_unused_css', 'lazyload_bg_images',
 			// Security v1.6.0
 			'harden_disable_xmlrpc', 'harden_limit_login', 'harden_block_php_uploads',
 			'sec_headers_php_fallback',
@@ -292,7 +303,29 @@ class TE_Admin {
 			'sec_header_frame', 'sec_header_csp', 'sec_header_csp_enforce',
 		);
 
+		// DATA-LOSS (T2.17): the blanket loop sets every checkbox to false when it is
+		// absent from $raw. But the Woo fields are only rendered when WooCommerce is
+		// active, and the Speculation checkbox only when the Speculation tab renders,
+		// so when those sections are inactive their fields are never POSTed — and the
+		// loop would silently wipe the stored values. Exclude those keys from the
+		// blanket reset when their section is inactive, and overwrite them from $raw
+		// only if actually submitted (otherwise preserve the stored value).
+		$woo_active         = class_exists( 'WooCommerce' );
+		$speculation_posted = isset( $raw['speculation_mode'] ); // Radio always POSTed when the Speculation tab renders.
+
+		$preserve_if_absent = array();
+		if ( ! $woo_active ) {
+			$preserve_if_absent = array( 'woo_exclude_cart', 'woo_exclude_checkout', 'woo_exclude_account', 'woo_purge_stock' );
+		}
+		if ( ! $speculation_posted ) {
+			$preserve_if_absent[] = 'speculation_enabled';
+		}
+
 		foreach ( $checkboxes as $key ) {
+			if ( in_array( $key, $preserve_if_absent, true ) && ! isset( $raw[ $key ] ) ) {
+				// Section inactive and field not submitted: keep the stored value.
+				continue;
+			}
 			$settings[ $key ] = ! empty( $raw[ $key ] );
 		}
 
@@ -311,6 +344,13 @@ class TE_Admin {
 			if ( isset( $raw[ $key ] ) ) {
 				$settings[ $key ] = absint( $raw[ $key ] );
 			}
+		}
+
+		// SECURITY (T2.19): clamp the login-attempt ceiling to a minimum of 3. The
+		// HTML min=3 is client-only; a posted/stored 0 would make the limiter reject
+		// EVERY login attempt and lock out all users. Clamp server-side.
+		if ( isset( $raw['harden_login_max_attempts'] ) ) {
+			$settings['harden_login_max_attempts'] = max( 3, absint( $raw['harden_login_max_attempts'] ) );
 		}
 
 		// Clamp off-peak window hours to 0-23.
@@ -332,6 +372,17 @@ class TE_Admin {
 
 		// Front-page cache override (checkbox).
 		$settings['front_page_cache_override'] = ! empty( $raw['front_page_cache_override'] );
+
+		// Editorial controls: signed ints, so NOT in the absint() $numbers list.
+		// Revisions: -1 (leave alone) .. up; clamp the floor to -1. Autosave: 0
+		// (leave default) or 60-600; 0 passes through, the module clamps the rest.
+		if ( isset( $raw['editorial_revisions'] ) ) {
+			$settings['editorial_revisions'] = max( -1, (int) $raw['editorial_revisions'] );
+		}
+		if ( isset( $raw['editorial_autosave'] ) ) {
+			$av = (int) $raw['editorial_autosave'];
+			$settings['editorial_autosave'] = ( $av <= 0 ) ? 0 : max( 60, min( 600, $av ) );
+		}
 
 		$text_fields = array(
 			'invalidation_method', 'i3_max_length', 'delay_js_exclusions', 'defer_js_exclusions', 'combine_js_exclusions',
@@ -450,6 +501,22 @@ class TE_Admin {
 		);
 
 		wp_send_json_success( $detection );
+	}
+
+	/**
+	 * Wizard: dismiss only. Sets the dismissed flag and nothing else — it must NOT
+	 * touch settings. (The old "skip" posted an empty settings payload to the save
+	 * handler, which reset every checkbox to false, including the master switch.)
+	 */
+	public static function ajax_wizard_dismiss() {
+		check_ajax_referer( 'flavor_edge_admin', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
+
+		TE_Wizard::dismiss();
+		wp_send_json_success();
 	}
 
 	/**

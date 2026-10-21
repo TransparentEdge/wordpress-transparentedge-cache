@@ -106,8 +106,11 @@ class TE_I3 {
 		$parts = array();
 
 		if ( $s['i3_auto_webp'] ) {
+			// T2.21: emit the configured WebP quality for ANY valid value (1–100).
+			// The old guard excluded exactly 80 and 100 as "default", silently
+			// dropping a user's explicit choice of those values.
 			$quality = (int) $s['i3_quality_webp'];
-			if ( $quality > 0 && 80 !== $quality && 100 !== $quality ) {
+			if ( $quality >= 1 && $quality <= 100 ) {
 				$parts[] = 'auto_webp:' . $quality . '%';
 			} else {
 				$parts[] = 'auto_webp';
@@ -115,8 +118,11 @@ class TE_I3 {
 		}
 
 		// JPEG quality adjustment (independent of WebP — applies to non-WebP clients).
-		if ( $s['i3_quality_jpeg'] > 0 && 100 !== (int) $s['i3_quality_jpeg'] ) {
-			$parts[] = 'quality:' . (int) $s['i3_quality_jpeg'] . '%';
+		// T2.21: same fix — emit any valid value (1–100), including exactly 100 which
+		// the old guard dropped as "default".
+		$jpeg_quality = (int) $s['i3_quality_jpeg'];
+		if ( $jpeg_quality >= 1 && $jpeg_quality <= 100 ) {
+			$parts[] = 'quality:' . $jpeg_quality . '%';
 		}
 
 		if ( ! empty( $s['i3_max_length'] ) ) {
@@ -163,8 +169,11 @@ class TE_I3 {
 		$transform_parts = array();
 
 		if ( $s['i3_auto_webp'] ) {
+			// T2.21: emit the configured WebP quality for ANY valid value (1–100) —
+			// 80 and 100 were wrongly treated as "default" and dropped. Match
+			// build_transform_header().
 			$quality = (int) $s['i3_quality_webp'];
-			if ( $quality > 0 && 80 !== $quality && 100 !== $quality ) {
+			if ( $quality >= 1 && $quality <= 100 ) {
 				$transform_parts[] = 'auto_webp:' . $quality . '%';
 			} else {
 				$transform_parts[] = 'auto_webp';
@@ -172,7 +181,7 @@ class TE_I3 {
 		}
 
 		$jpeg_quality = (int) $s['i3_quality_jpeg'];
-		if ( $jpeg_quality > 0 && 100 !== $jpeg_quality ) {
+		if ( $jpeg_quality >= 1 && $jpeg_quality <= 100 ) {
 			$transform_parts[] = 'quality:' . $jpeg_quality . '%';
 		}
 

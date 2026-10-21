@@ -147,7 +147,12 @@ class TE_Invalidation {
 		// Purge when going from published to unpublished or vice versa.
 		if ( ( 'publish' === $old_status && 'publish' !== $new_status ) ||
 			 ( 'publish' !== $old_status && 'publish' === $new_status ) ) {
-			self::queue_post_tags( $post->ID, $post );
+			// T2.7: only warm the post's own permalink when it ENDS UP published. When
+			// it is leaving 'publish' (trash/draft/pending/private) the permalink is no
+			// longer publicly viewable, so warming it after the purge would cache a
+			// fresh 404 at the edge. Tags/URLs are still purged; archives/home still warm.
+			$warm_self = ( 'publish' === $new_status );
+			self::queue_post_tags( $post->ID, $post, $warm_self );
 		}
 	}
 
@@ -162,7 +167,11 @@ class TE_Invalidation {
 			return;
 		}
 
-		self::queue_post_tags( $post_id, $post );
+		// T2.7: the post is being trashed/deleted — still purge its tags/URLs, but do
+		// NOT warm its own (now-dead) permalink, or the edge re-caches a fresh 404.
+		// (This fires on wp_trash_post BEFORE the status flips, so a status check here
+		// would still read 'publish'; pass the intent explicitly instead.)
+		self::queue_post_tags( $post_id, $post, false );
 	}
 
 	/**
@@ -360,16 +369,24 @@ class TE_Invalidation {
 	/**
 	 * Queue tags affected by a post change.
 	 *
-	 * @param int      $post_id Post ID.
-	 * @param \WP_Post $post    Post object.
+	 * @param int      $post_id   Post ID.
+	 * @param \WP_Post $post      Post object.
+	 * @param bool     $warm_self Whether to warm the post's OWN permalink. Pass false
+	 *                            when the post is leaving 'publish' (T2.7) so we don't
+	 *                            re-cache a 404 for a now-unviewable permalink.
 	 */
-	private static function queue_post_tags( $post_id, $post ) {
+	private static function queue_post_tags( $post_id, $post, $warm_self = true ) {
 		// Debounce: editors often hit "Update" several times in a row. If this
 		// exact post was already queued very recently, skip re-queuing its tags
 		// and warm-up URLs to avoid repeated purge+warm cycles against origin.
 		// The post's own tag is still ensured below so the edit is never lost.
+		// The debounce is bypassed when the post is leaving 'publish' ($warm_self
+		// false): pulling a story (trash/unpublish) must ALWAYS do the full fan-out
+		// (home, sections, author) so a just-removed article stops being linked from
+		// archives immediately — never collapsed to a post-only purge by a debounce
+		// left over from the publish moments earlier.
 		$debounce = (int) apply_filters( 'flavor_edge_purge_debounce_seconds', 5 );
-		if ( $debounce > 0 ) {
+		if ( $warm_self && $debounce > 0 ) {
 			$key = 'flavor_edge_post_debounce_' . $post_id;
 			if ( get_transient( $key ) ) {
 				// Within the debounce window: ensure the post tag is present
@@ -414,7 +431,13 @@ class TE_Invalidation {
 		}
 
 		// Collect warm-up URLs.
-		self::$warmup_urls[] = get_permalink( $post_id );
+		// T2.7: only warm the post's own permalink when it is still publicly viewable.
+		// On a publish → trash/draft/pending/private transition the permalink resolves
+		// to a 404/non-public page, and warming it after the purge would cache a fresh
+		// 404 at the edge. The home page and archives below are still warmed.
+		if ( $warm_self ) {
+			self::$warmup_urls[] = get_permalink( $post_id );
+		}
 		self::$warmup_urls[] = home_url( '/' );
 
 		// Post type archive URL (for CPTs).
@@ -483,7 +506,10 @@ class TE_Invalidation {
 		}
 
 		// Tag-based purge (always soft — prevents thundering herd on origin).
-		$tags = array_unique( array_filter( self::$pending_tags ) );
+		// sanitize_key each tag so it matches the Surrogate-Keys the headers module
+		// emits (which are sanitize_key'd): a mixed-case menu/taxonomy id like
+		// "menu-topBar" must purge the stored "menu-topbar" or the purge is a no-op.
+		$tags = array_unique( array_filter( array_map( 'sanitize_key', self::$pending_tags ) ) );
 		if ( ! empty( $tags ) ) {
 			$result = TE_Api::purge_tags( $tags, true );
 
@@ -642,6 +668,7 @@ class TE_Invalidation {
 				foreach ( $batch as $url ) {
 					wp_remote_get( $url, array(
 						'timeout'     => $req_timeout,
+						'httpversion' => '1.1', // WP defaults to HTTP/1.0, which the edge can drop over IPv4.
 						'blocking'    => true,
 						'user-agent'  => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url( '/' ),
 						'redirection' => 0,

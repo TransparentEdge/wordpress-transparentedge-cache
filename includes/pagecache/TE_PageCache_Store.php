@@ -192,6 +192,18 @@ class TE_PageCache_Store {
 		if ( $ms < 0 || ! function_exists( 'get_transient' ) ) {
 			return;
 		}
+		// The adaptive pacer only reads this latency DURING a preload. Recording it
+		// on every anonymous cache-miss store otherwise is a needless DB write on the
+		// disk backend (write amplification on a busy origin), so gate on an active
+		// preload. The check is memoised per request.
+		static $preloading = null;
+		if ( null === $preloading ) {
+			$status     = get_option( 'flavor_edge_preload_status', null );
+			$preloading = ( is_array( $status ) && isset( $status['status'] ) && 'running' === $status['status'] );
+		}
+		if ( ! $preloading ) {
+			return;
+		}
 		$prev = (float) get_transient( self::WRITE_MS_KEY );
 		$ewma = $prev > 0 ? ( 0.8 * $prev + 0.2 * $ms ) : $ms;
 		set_transient( self::WRITE_MS_KEY, $ewma, 600 );
@@ -483,7 +495,14 @@ class TE_PageCache_Store {
 		if ( ! $m ) {
 			return false;
 		}
-		return $m->set( $this->mkey( $key ), $entry, $this->ttl );
+		// Memcached reads any expiry > 30 days as an absolute Unix timestamp; a
+		// page_cache_ttl set above that (relative seconds) would be read as a 1970
+		// timestamp → instant expiry → nothing cached. Convert to absolute time.
+		$ttl = (int) $this->ttl;
+		if ( $ttl > 2592000 ) {
+			$ttl = time() + $ttl;
+		}
+		return $m->set( $this->mkey( $key ), $entry, $ttl );
 	}
 
 	private function memcached_bump_generation() {

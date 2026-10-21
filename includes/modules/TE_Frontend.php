@@ -66,35 +66,49 @@ class TE_Frontend {
 			return $html;
 		}
 
-		$s = TE_Settings::get_all();
+		$original = $html;
+		$s        = TE_Settings::get_all();
+
+		// Each step runs preg_* over the whole page; on a pathological page those can
+		// hit pcre.backtrack_limit and return null, which the output-buffer callback
+		// would emit as a BLANK PAGE. Guard every step: a null/empty result is
+		// discarded and the previous HTML kept.
+		$safe = static function ( $result, $fallback ) {
+			return ( is_string( $result ) && '' !== $result ) ? $result : $fallback;
+		};
 
 		// 1. Lazy Load images and iframes.
 		if ( $s['lazyload_images'] ) {
-			$html = self::apply_lazyload_images( $html );
+			$html = $safe( self::apply_lazyload_images( $html ), $html );
 		}
 		if ( $s['lazyload_iframes'] ) {
-			$html = self::apply_lazyload_iframes( $html );
+			$html = $safe( self::apply_lazyload_iframes( $html ), $html );
 		}
 		if ( ! empty( $s['lazyload_bg_images'] ) ) {
-			$html = self::apply_lazyload_bg_images( $html );
+			$html = $safe( self::apply_lazyload_bg_images( $html ), $html );
 		}
 
 		// 2. Preload LCP image.
 		if ( $s['preload_lcp'] ) {
-			$html = self::apply_preload_lcp( $html );
+			$html = $safe( self::apply_preload_lcp( $html ), $html );
 		}
 
 		// 3. Delay JS execution.
 		if ( $s['delay_js'] ) {
-			$html = self::apply_delay_js( $html, $s['delay_js_exclusions'] );
+			$html = $safe( self::apply_delay_js( $html, $s['delay_js_exclusions'] ), $html );
 		}
+
+		// 3.5. Let other modules rewrite the final HTML (e.g. self-hosting Google
+		// Fonts loaded via a raw <link>, not wp_enqueue_style).
+		$html = $safe( apply_filters( 'flavor_edge_html_output', $html ), $html );
 
 		// 4. Minify HTML (last, after all other modifications).
 		if ( $s['minify_html'] ) {
-			$html = self::apply_minify_html( $html );
+			$html = $safe( self::apply_minify_html( $html ), $html );
 		}
 
-		return $html;
+		// Final guard: never return an empty/non-string page.
+		return ( is_string( $html ) && '' !== $html ) ? $html : $original;
 	}
 
 	// -------------------------------------------------------------------------

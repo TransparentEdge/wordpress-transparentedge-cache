@@ -30,6 +30,99 @@ class TE_ObjectCache {
 		add_action( 'wp_ajax_flavor_edge_enable_object_cache', array( __CLASS__, 'ajax_enable' ) );
 		add_action( 'wp_ajax_flavor_edge_disable_object_cache', array( __CLASS__, 'ajax_disable' ) );
 		add_action( 'wp_ajax_flavor_edge_flush_object_cache', array( __CLASS__, 'ajax_flush' ) );
+		add_action( 'wp_ajax_flavor_edge_replace_object_cache', array( __CLASS__, 'ajax_replace' ) );
+
+		// Turnkey: auto-enable on a live memory backend, and surface honest status.
+		add_action( 'admin_init', array( __CLASS__, 'maybe_auto_enable' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'admin_notices' ) );
+	}
+
+	/**
+	 * Auto-install our object-cache drop-in when a live in-memory backend exists
+	 * and nothing (of ours) is set up yet. Opt-out via the object_cache_auto
+	 * setting. Never overwrites a foreign drop-in — it flags a notice instead.
+	 * The backend round-trips are rate-limited so this stays cheap on admin_init.
+	 *
+	 * @param bool $force Skip the rate-limit (used on activation).
+	 */
+	public static function maybe_auto_enable( $force = false ) {
+		if ( ! TE_Settings::get( 'object_cache_auto', true ) ) {
+			return;
+		}
+		$status = self::get_dropin_status();
+		if ( $status['installed'] && $status['ours'] ) {
+			return; // already ours (kept current by maybe_upgrade_dropin on upgrade).
+		}
+		if ( ! $force && get_transient( 'flavor_edge_oc_autocheck' ) ) {
+			return;
+		}
+		set_transient( 'flavor_edge_oc_autocheck', 1, HOUR_IN_SECONDS );
+
+		if ( $status['installed'] && ! $status['ours'] ) {
+			update_option( 'flavor_edge_oc_foreign', $status['other'] ); // flag for a notice; never silently overwrite.
+			return;
+		}
+
+		$live = self::detect_backends();
+		if ( empty( $live['recommended'] ) ) {
+			return; // no live memory backend — needs a PHP extension + service.
+		}
+		$res = self::install_dropin( $live['recommended'] );
+		if ( ! empty( $res['success'] ) ) {
+			update_option( 'flavor_edge_oc_autoenabled', $live['recommended'] );
+			delete_option( 'flavor_edge_oc_foreign' );
+		}
+	}
+
+	/**
+	 * Honest admin notices: auto-enabled (once), a foreign drop-in blocking us,
+	 * and — critically — a drop-in whose backend is down (installed but NOT
+	 * persisting, which the hit counter alone would hide).
+	 */
+	public static function admin_notices() {
+		$screen    = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$on_plugin = $screen && in_array( $screen->id, array( 'toplevel_page_flavor-edge-cache', 'dashboard' ), true );
+
+		$auto = get_option( 'flavor_edge_oc_autoenabled' );
+		if ( $auto ) {
+			delete_option( 'flavor_edge_oc_autoenabled' );
+			printf(
+				'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+				esc_html( sprintf(
+					/* translators: %s: backend name */
+					__( 'Transparent Edge Cache: object cache enabled automatically with the %s backend.', 'flavor-edge-cache' ),
+					ucfirst( (string) $auto )
+				) )
+			);
+		}
+
+		if ( ! $on_plugin ) {
+			return;
+		}
+
+		$foreign = get_option( 'flavor_edge_oc_foreign' );
+		if ( $foreign ) {
+			printf(
+				'<div class="notice notice-warning"><p>%s</p></div>',
+				esc_html( sprintf(
+					/* translators: %s: other plugin name */
+					__( 'Transparent Edge Cache: an object-cache.php from "%s" is in place and is blocking our object cache. Remove it, or replace it from TE Cache → Cache.', 'flavor-edge-cache' ),
+					$foreign
+				) )
+			);
+		}
+
+		$stats = self::get_stats();
+		if ( ! empty( $stats['degraded'] ) ) {
+			printf(
+				'<div class="notice notice-error"><p><strong>%s</strong></p></div>',
+				esc_html( sprintf(
+					/* translators: %s: backend name */
+					__( 'Transparent Edge Cache: the object cache drop-in (%s) is installed but its server is not answering — it is NOT caching persistently (every request recomputes against the database). Start the service or switch backend.', 'flavor-edge-cache' ),
+					$stats['backend']
+				) )
+			);
+		}
 	}
 
 	/**
@@ -37,10 +130,20 @@ class TE_ObjectCache {
 	 *
 	 * @return array { redis: bool, memcached: bool, apcu: bool, recommended: string|false }
 	 */
-	public static function detect_backends() {
+	public static function detect_backends( $force = false ) {
+		// Per-request memo: admin_notices, get_stats and the dashboard card each call
+		// this on a single admin load, and each call opens real Redis/Memcached
+		// sockets. Probe once per request unless a caller needs a fresh read.
+		static $memo = null;
+		if ( ! $force && null !== $memo ) {
+			return $memo;
+		}
+
 		$result = array(
 			'redis'       => false,
 			'redis_server' => false,
+			'redis_needs_auth' => false,
+			'redis_down'  => false,
 			'redis_info'  => '',
 			'memcached'   => false,
 			'memcached_server' => false,
@@ -63,16 +166,40 @@ class TE_ObjectCache {
 			try {
 				$redis = new \Redis();
 				if ( @$redis->connect( $host, (int) $port, 1 ) ) {
-					if ( $pass ) {
-						$redis->auth( $pass );
-					}
-					if ( @$redis->ping() ) {
-						$result['redis'] = true;
-						$info = $redis->info( 'memory' );
-						$result['redis_info'] .= ' — ' . size_format( $info['used_memory'] ?? 0 ) . ' used';
+					// The daemon answered. AUTH (if a password is configured) and PING
+					// can still fail on a password-protected server — the common case
+					// in production. phpredis throws on those, so catch them here and
+					// surface an actionable hint instead of a bare "unavailable".
+					try {
+						if ( $pass ) {
+							$redis->auth( $pass );
+						}
+						if ( $redis->ping() ) {
+							$result['redis'] = true;
+							$info = $redis->info( 'memory' );
+							$result['redis_info'] .= ' — ' . size_format( $info['used_memory'] ?? 0 ) . ' used';
+						}
+					} catch ( \Exception $auth_e ) {
+						// Reached the daemon; only authentication is the blocker.
+						$result['redis_server'] = true;
+						$msg = $auth_e->getMessage();
+						if ( ! $pass && false !== stripos( $msg, 'NOAUTH' ) ) {
+							$result['redis_needs_auth'] = true;
+							$result['redis_info']      .= ' — ' .
+								__( 'Redis server requires a password. Add to wp-config.php:', 'flavor-edge-cache' ) .
+								" define('WP_REDIS_PASSWORD', 'your-password');";
+						} elseif ( false !== stripos( $msg, 'NOAUTH' ) || false !== stripos( $msg, 'WRONGPASS' ) || false !== stripos( $msg, 'invalid password' ) || false !== stripos( $msg, 'without any password' ) ) {
+							$result['redis_info'] .= ' — ' .
+								__( 'Redis AUTH failed. Check WP_REDIS_PASSWORD in wp-config.php.', 'flavor-edge-cache' );
+						} else {
+							$result['redis_info'] .= ' — connection failed: ' . $msg;
+						}
 					}
 					$redis->close();
 				} else {
+					// Reached nothing: the extension is present but the daemon is down
+					// or on another host/port — NOT an "extension missing" situation.
+					$result['redis_down'] = true;
 					$result['redis_info'] .= ' — ' . __( 'phpredis is installed but no Redis server answered here. Start Redis, or point WP_REDIS_HOST / WP_REDIS_PORT at a running one.', 'flavor-edge-cache' );
 				}
 			} catch ( \Exception $e ) {
@@ -194,6 +321,7 @@ class TE_ObjectCache {
 			$result['recommended'] = 'apcu';
 		}
 
+		$memo = $result;
 		return $result;
 	}
 
@@ -208,6 +336,7 @@ class TE_ObjectCache {
 			'installed' => false,
 			'ours'      => false,
 			'backend'   => '',
+			'version'   => '',
 			'other'     => '',
 		);
 
@@ -221,6 +350,9 @@ class TE_ObjectCache {
 		$header = file_get_contents( $dropin, false, null, 0, 500 );
 		if ( false !== strpos( $header, 'Flavor Edge Cache' ) ) {
 			$result['ours'] = true;
+			if ( preg_match( '/flavor-edge-oc-version:\s*([0-9][0-9.]*)/', $header, $m ) ) {
+				$result['version'] = $m[1];
+			}
 			if ( false !== strpos( $header, 'Redis' ) ) {
 				$result['backend'] = 'redis';
 			} elseif ( false !== strpos( $header, 'Memcached' ) ) {
@@ -257,6 +389,10 @@ class TE_ObjectCache {
 			'hit_ratio'  => 0,
 			'groups'     => 0,
 			'backend'    => 'none',
+			'version'    => '',
+			'persistent' => true,  // assume yes; flipped below if our backend is dead.
+			'degraded'   => false, // drop-in installed but its backend is not answering.
+			'outdated'   => false, // our drop-in is from an older plugin version.
 		);
 
 		if ( ! $stats['enabled'] ) {
@@ -275,11 +411,47 @@ class TE_ObjectCache {
 			$stats['hit_ratio'] = round( ( $stats['hits'] / $total ) * 100, 1 );
 		}
 
-		// Detect backend type.
+		// Detect backend + whether it is ACTUALLY a live persistent store. The
+		// drop-in silently falls back to a per-request array when its backend is
+		// down, and still increments cache_hits — so the hit counter can look
+		// healthy while nothing persists. Verify the backend independently (a live
+		// round-trip) instead of trusting the counter.
 		$dropin = self::get_dropin_status();
 		$stats['backend'] = $dropin['backend'] ?: 'external';
+		$stats['version'] = $dropin['version'];
+
+		if ( $dropin['ours'] && $dropin['backend'] ) {
+			$live                = self::detect_backends();
+			$stats['persistent'] = ! empty( $live[ $dropin['backend'] ] );
+			$stats['degraded']   = ! $stats['persistent'];
+			$stats['outdated']   = ( '' !== $dropin['version'] && $dropin['version'] !== FLAVOR_EDGE_VERSION );
+		}
 
 		return $stats;
+	}
+
+	/**
+	 * Regenerate our object-cache.php drop-in when it is stale after a plugin
+	 * upgrade. The drop-in is self-contained, so fixes shipped in a new plugin
+	 * version never reach an already-installed drop-in until it is rewritten.
+	 * Called from the plugin's version-change hook; only touches a drop-in that
+	 * is ours and keeps the backend the user already chose.
+	 *
+	 * @return bool True if the drop-in was regenerated.
+	 */
+	public static function maybe_upgrade_dropin() {
+		$status = self::get_dropin_status();
+		if ( ! $status['installed'] || ! $status['ours'] || ! $status['backend'] ) {
+			return false;
+		}
+		if ( $status['version'] === FLAVOR_EDGE_VERSION ) {
+			return false; // already current.
+		}
+		$code = self::generate_dropin( $status['backend'] );
+		if ( false === strpos( $code, 'function wp_cache_init' ) ) {
+			return false; // never write an invalid drop-in.
+		}
+		return self::write_atomic( WP_CONTENT_DIR . '/object-cache.php', $code );
 	}
 
 	/**
@@ -291,14 +463,23 @@ class TE_ObjectCache {
 	public static function generate_dropin( $backend ) {
 		switch ( $backend ) {
 			case 'redis':
-				return self::generate_redis_dropin();
+				$code = self::generate_redis_dropin();
+				break;
 			case 'memcached':
-				return self::generate_memcached_dropin();
+				$code = self::generate_memcached_dropin();
+				break;
 			case 'apcu':
-				return self::generate_apcu_dropin();
+				$code = self::generate_apcu_dropin();
+				break;
 			default:
 				return '<?php // Unsupported backend.';
 		}
+
+		// Stamp the plugin version into the drop-in so a plugin upgrade can detect a
+		// stale drop-in and regenerate it (the drop-in is self-contained, so our fixes
+		// do NOT reach it otherwise). Marker is read by get_dropin_status().
+		$stamp = "<?php\n// flavor-edge-oc-version: " . FLAVOR_EDGE_VERSION . "\n";
+		return preg_replace( '/^<\?php\r?\n/', $stamp, $code, 1 );
 	}
 
 	/**
@@ -307,20 +488,25 @@ class TE_ObjectCache {
 	 * @param string $backend Backend type.
 	 * @return array { success, message }
 	 */
-	public static function install_dropin( $backend ) {
+	public static function install_dropin( $backend, $force = false ) {
 		$dropin = WP_CONTENT_DIR . '/object-cache.php';
 
 		// Check if another plugin's drop-in exists.
 		$status = self::get_dropin_status();
 		if ( $status['installed'] && ! $status['ours'] ) {
-			return array(
-				'success' => false,
-				'message' => sprintf(
-					/* translators: %s: plugin name */
-					__( 'Another object cache drop-in is already installed (%s). Remove it first.', 'flavor-edge-cache' ),
-					$status['other']
-				),
-			);
+			if ( ! $force ) {
+				return array(
+					'success' => false,
+					'foreign' => $status['other'],
+					'message' => sprintf(
+						/* translators: %s: plugin name */
+						__( 'Another object cache drop-in is already installed (%s). Remove it first, or replace it.', 'flavor-edge-cache' ),
+						$status['other']
+					),
+				);
+			}
+			// Replacing a foreign drop-in: back it up (behind a PHP guard) first.
+			self::backup_foreign_dropin( $dropin );
 		}
 
 		$code = self::generate_dropin( $backend );
@@ -335,7 +521,7 @@ class TE_ObjectCache {
 			);
 		}
 
-		if ( false === file_put_contents( $dropin, $code ) ) {
+		if ( ! self::write_atomic( $dropin, $code ) ) {
 			return array(
 				'success' => false,
 				'message' => __( 'Could not write object-cache.php. Check file permissions on wp-content/.', 'flavor-edge-cache' ),
@@ -350,6 +536,70 @@ class TE_ObjectCache {
 				ucfirst( $backend )
 			),
 		);
+	}
+
+	/**
+	 * Write a drop-in (a file WordPress includes on every request) atomically.
+	 *
+	 * WordPress `include`s object-cache.php / advanced-cache.php without any lock,
+	 * so writing them in place with file_put_contents lets a concurrent worker read
+	 * a half-written file → parse error → site-wide white screen for the write
+	 * window. We write to a temp file in the SAME directory and rename() over the
+	 * target: rename is atomic on POSIX, so a reader always sees either the old or
+	 * the new file whole, never a mix. opcache is invalidated so the new code is
+	 * actually picked up. Falls back to a direct write only if tempnam fails.
+	 *
+	 * @param string $path Target path (same dir must be writable).
+	 * @param string $code File contents.
+	 * @return bool
+	 */
+	public static function write_atomic( $path, $code ) {
+		$direct = static function () use ( $path, $code ) {
+			$ok = ( false !== @file_put_contents( $path, $code, LOCK_EX ) );
+			if ( $ok && function_exists( 'opcache_invalidate' ) ) {
+				@opcache_invalidate( $path, true );
+			}
+			return $ok;
+		};
+
+		// A symlinked target (some setups symlink wp-config.php) must be written
+		// THROUGH the link; a rename would replace the link with a regular file.
+		if ( is_link( $path ) ) {
+			return $direct();
+		}
+
+		// Preserve the target's existing permissions. Forcing 0644 on wp-config.php
+		// (often 0640/0600 to hide its secrets) would make it world-readable.
+		$perms = file_exists( $path ) ? ( @fileperms( $path ) & 0777 ) : 0644;
+		if ( ! $perms ) {
+			$perms = 0644;
+		}
+
+		$tmp = @tempnam( dirname( $path ), '.fe-tmp-' );
+		if ( false === $tmp ) {
+			return $direct(); // Could not stage a temp file next to the target.
+		}
+		// tempnam() silently falls back to the system temp dir when the target dir
+		// is not writable; a cross-filesystem rename is not atomic (and fails with
+		// EXDEV on Linux), so only use the rename path when the temp is truly beside
+		// the target. Otherwise fall back to a direct write.
+		if ( dirname( $tmp ) !== dirname( $path ) ) {
+			@unlink( $tmp );
+			return $direct();
+		}
+		if ( false === @file_put_contents( $tmp, $code, LOCK_EX ) ) {
+			@unlink( $tmp );
+			return false;
+		}
+		@chmod( $tmp, $perms );
+		if ( ! @rename( $tmp, $path ) ) {
+			@unlink( $tmp );
+			return false;
+		}
+		if ( function_exists( 'opcache_invalidate' ) ) {
+			@opcache_invalidate( $path, true );
+		}
+		return true;
 	}
 
 	/**
@@ -406,6 +656,44 @@ class TE_ObjectCache {
 
 		wp_cache_flush();
 		wp_send_json_success( __( 'Object cache flushed.', 'flavor-edge-cache' ) );
+	}
+
+	/**
+	 * Replace a foreign object-cache.php (e.g. a W3TC leftover) with ours, after
+	 * backing the foreign one up. Explicit, user-initiated — never automatic.
+	 */
+	public static function ajax_replace() {
+		check_ajax_referer( 'flavor_edge_admin', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Unauthorized' );
+		}
+		$backend = sanitize_text_field( wp_unslash( $_POST['backend'] ?? '' ) );
+		if ( '' === $backend ) {
+			$live    = self::detect_backends();
+			$backend = $live['recommended'] ?: '';
+		}
+		$result = self::install_dropin( $backend, true );
+		if ( ! empty( $result['success'] ) ) {
+			delete_option( 'flavor_edge_oc_foreign' );
+		}
+		wp_send_json( $result );
+	}
+
+	/**
+	 * Back up a foreign object-cache.php into the plugin's cache dir behind a PHP
+	 * guard (so a direct web hit reveals nothing) before we overwrite it.
+	 *
+	 * @param string $dropin Path to the current object-cache.php.
+	 */
+	private static function backup_foreign_dropin( $dropin ) {
+		$dir = WP_CONTENT_DIR . '/cache/flavor-edge';
+		if ( ! is_dir( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
+		$contents = @file_get_contents( $dropin );
+		if ( false !== $contents ) {
+			@file_put_contents( $dir . '/object-cache-foreign.bak.php', "<?php exit; __halt_compiler();\n" . $contents, LOCK_EX );
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -664,16 +952,24 @@ class WP_Object_Cache_APCu {
 	private $global_groups = array();
 	private $non_persistent = array();
 	private $prefix = '';
+	private $salt = '';
 	public $cache_hits = 0;
 	public $cache_misses = 0;
 
 	public function __construct() {
 		$this->prefix = is_multisite() ? get_current_blog_id() . ':' : '';
+		// Per-install namespace so two installs on one PHP-FPM pool never collide
+		// and our flush stays inside our own keys.
+		$this->salt = 'feoc:' . substr( md5(
+			( defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : '' )
+			. ( defined( 'DB_NAME' ) ? DB_NAME : '' ) . '|'
+			. ( isset( $GLOBALS['table_prefix'] ) ? $GLOBALS['table_prefix'] : '' )
+		), 0, 12 ) . ':';
 	}
 
 	private function key( $key, $group ) {
 		$p = in_array( $group, $this->global_groups, true ) ? '' : $this->prefix;
-		return 'fe:' . $p . $group . ':' . $key;
+		return $this->salt . $p . $group . ':' . $key;
 	}
 
 	public function get( $key, $group = 'default', $force = false, &$found = null ) {
@@ -717,7 +1013,15 @@ class WP_Object_Cache_APCu {
 		$k = $this->key( $key, $group ); $v = apcu_dec( $k, $offset ); $this->cache[$k] = $v; return $v;
 	}
 
-	public function flush() { $this->cache = array(); apcu_clear_cache(); return true; }
+	public function flush() {
+		$this->cache = array();
+		// Delete only OUR keys — never apcu_clear_cache(), which wipes the entire
+		// APCu store (every other plugin and install sharing this PHP pool).
+		if ( class_exists( 'APCUIterator' ) ) {
+			@apcu_delete( new APCUIterator( '/^' . preg_quote( $this->salt, '/' ) . '/' ) );
+		}
+		return true;
+	}
 	public function add_global_groups( $groups ) { $this->global_groups = array_unique( array_merge( $this->global_groups, (array) $groups ) ); }
 	public function add_non_persistent_groups( $groups ) { $this->non_persistent = array_unique( array_merge( $this->non_persistent, (array) $groups ) ); }
 	public function switch_to_blog( $blog_id ) { $this->prefix = is_multisite() ? $blog_id . ':' : ''; }
@@ -795,17 +1099,25 @@ class WP_Object_Cache_Memcached {
 		return $found ? $val : false;
 	}
 
+	private function exp( $expire ) {
+		$e = (int) $expire;
+		// Memcached treats any expiry > 30 days as an absolute Unix timestamp; WP
+		// passes relative seconds, so a long TTL (e.g. a year) would be read as a
+		// 1971 timestamp and the item would never persist. Convert to absolute time.
+		return ( $e > 2592000 ) ? ( time() + $e ) : $e;
+	}
+
 	public function set( $key, $data, $group = 'default', $expire = 0 ) {
 		$k = $this->key( $key, $group ); $this->cache[ $k ] = $data;
 		if ( in_array( $group, $this->non_persistent, true ) || ! $this->mc ) { return true; }
-		return $this->mc->set( $k, $data, (int) $expire );
+		return $this->mc->set( $k, $data, $this->exp( $expire ) );
 	}
 
 	public function add( $key, $data, $group = 'default', $expire = 0 ) {
 		$k = $this->key( $key, $group );
 		if ( isset( $this->cache[ $k ] ) ) { return false; }
 		if ( $this->mc && ! in_array( $group, $this->non_persistent, true ) ) {
-			$ok = $this->mc->add( $k, $data, (int) $expire );
+			$ok = $this->mc->add( $k, $data, $this->exp( $expire ) );
 			if ( $ok ) { $this->cache[ $k ] = $data; }
 			return $ok;
 		}
@@ -815,7 +1127,7 @@ class WP_Object_Cache_Memcached {
 	public function replace( $key, $data, $group = 'default', $expire = 0 ) {
 		$k = $this->key( $key, $group );
 		if ( $this->mc && ! in_array( $group, $this->non_persistent, true ) ) {
-			$ok = $this->mc->replace( $k, $data, (int) $expire );
+			$ok = $this->mc->replace( $k, $data, $this->exp( $expire ) );
 			if ( $ok ) { $this->cache[ $k ] = $data; }
 			return $ok;
 		}
@@ -831,7 +1143,14 @@ class WP_Object_Cache_Memcached {
 	public function incr( $key, $offset = 1, $group = 'default' ) {
 		$k = $this->key( $key, $group );
 		if ( $this->mc && ! in_array( $group, $this->non_persistent, true ) ) {
-			$val = $this->mc->increment( $k, max( 0, (int) $offset ), isset( $this->cache[ $k ] ) ? (int) $this->cache[ $k ] : (int) $offset );
+			$val = $this->mc->increment( $k, max( 0, (int) $offset ) );
+			if ( false === $val ) {
+				// Key missing: the initial-value arg is ignored under the text
+				// protocol, so seed and persist it explicitly instead of only
+				// keeping it in the per-request array.
+				$seed = isset( $this->cache[ $k ] ) ? ( (int) $this->cache[ $k ] + (int) $offset ) : (int) $offset;
+				if ( $this->mc->set( $k, $seed ) ) { $val = $seed; }
+			}
 			if ( false !== $val ) { $this->cache[ $k ] = $val; return $val; }
 		}
 		$val = isset( $this->cache[ $k ] ) ? (int) $this->cache[ $k ] + (int) $offset : (int) $offset;
@@ -841,7 +1160,11 @@ class WP_Object_Cache_Memcached {
 	public function decr( $key, $offset = 1, $group = 'default' ) {
 		$k = $this->key( $key, $group );
 		if ( $this->mc && ! in_array( $group, $this->non_persistent, true ) ) {
-			$val = $this->mc->decrement( $k, max( 0, (int) $offset ), 0 );
+			$val = $this->mc->decrement( $k, max( 0, (int) $offset ) );
+			if ( false === $val ) {
+				$seed = max( 0, ( isset( $this->cache[ $k ] ) ? (int) $this->cache[ $k ] : 0 ) - (int) $offset );
+				if ( $this->mc->set( $k, $seed ) ) { $val = $seed; }
+			}
 			if ( false !== $val ) { $this->cache[ $k ] = $val; return $val; }
 		}
 		$val = isset( $this->cache[ $k ] ) ? max( 0, (int) $this->cache[ $k ] - (int) $offset ) : 0;

@@ -70,11 +70,22 @@ class TE_Api {
 			return false;
 		}
 
-		// Check transient first (persists across requests).
+		// Check transient first (persists across requests). Store the expiry with the
+		// token so a second get_token() this request reuses it instead of re-authing:
+		// without token_expires set, the "still valid" check below (time() < 0) fails
+		// and every purge/warm mints a redundant token over the network.
 		if ( ! $force && null === self::$token ) {
 			$cached = get_transient( 'flavor_edge_api_token' );
-			if ( $cached ) {
-				self::$token = $cached;
+			if ( is_array( $cached ) && ! empty( $cached['token'] ) ) {
+				self::$token         = $cached['token'];
+				self::$token_expires = isset( $cached['expires'] ) ? (int) $cached['expires'] : ( time() + 60 );
+				return self::$token;
+			}
+			if ( is_string( $cached ) && '' !== $cached ) {
+				// Legacy format (bare token string): adopt with a short conservative
+				// validity so this request reuses it rather than re-authing each call.
+				self::$token         = $cached;
+				self::$token_expires = time() + 60;
 				return self::$token;
 			}
 		}
@@ -127,8 +138,12 @@ class TE_Api {
 		$expires_in          = isset( $body['expires_in'] ) ? (int) $body['expires_in'] : 3600;
 		self::$token_expires = time() + $expires_in - 60; // 60s safety margin.
 
-		// Cache token in transient.
-		set_transient( 'flavor_edge_api_token', self::$token, $expires_in - 60 );
+		// Cache token + its absolute expiry in the transient (see the load path above).
+		set_transient(
+			'flavor_edge_api_token',
+			array( 'token' => self::$token, 'expires' => self::$token_expires ),
+			max( 1, $expires_in - 60 )
+		);
 
 		return self::$token;
 	}
@@ -235,7 +250,7 @@ class TE_Api {
 		// 206 = partial (some URLs invalid, Warning: 199) — still a success for
 		// the ones that went through, and must not trip the circuit breaker.
 		$ok          = ( 200 === $code || 206 === $code );
-		$retry_after = (int) wp_remote_retrieve_header( $response, 'retry-after' );
+		$retry_after = self::parse_retry_after( $response );
 
 		if ( $ok ) {
 			self::record_success();
@@ -250,6 +265,30 @@ class TE_Api {
 			'status'      => $code,
 			'retry_after' => $retry_after,
 		);
+	}
+
+	/**
+	 * Parse a Retry-After response header. RFC 7231 allows either delta-seconds
+	 * ("120") or an HTTP-date ("Wed, 21 Oct 2026 07:28:00 GMT"); a bare (int) cast
+	 * silently turns the date form into 0, so the pacer would ignore the server's
+	 * requested wait. Returns seconds-from-now (never negative).
+	 *
+	 * @param array|\WP_Error $response wp_remote_* response.
+	 * @return int
+	 */
+	private static function parse_retry_after( $response ) {
+		$raw = trim( (string) wp_remote_retrieve_header( $response, 'retry-after' ) );
+		if ( '' === $raw ) {
+			return 0;
+		}
+		if ( ctype_digit( $raw ) ) {
+			return (int) $raw;
+		}
+		$ts = strtotime( $raw );
+		if ( false === $ts ) {
+			return 0;
+		}
+		return max( 0, $ts - time() );
 	}
 
 	/**
@@ -295,7 +334,7 @@ class TE_Api {
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		// 429/503 → the platform is rate-limiting us; surface Retry-After so the
 		// caller can back off instead of hammering.
-		$retry_after = (int) wp_remote_retrieve_header( $response, 'retry-after' );
+		$retry_after = self::parse_retry_after( $response );
 		if ( 200 === $code || 206 === $code ) {
 			self::record_success();
 		} else {

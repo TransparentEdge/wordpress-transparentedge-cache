@@ -74,12 +74,16 @@ class TE_UnusedCSS {
 		$key       = self::get_template_key();
 		$cache_file = self::get_cache_dir() . '/' . $key . '.css';
 
-		if ( file_exists( $cache_file ) ) {
+		// Require a NON-EMPTY cache file before inlining+deferring. An empty Used-CSS
+		// (e.g. assets served from a CDN/other host that compute_used_css could not
+		// fetch) must NOT trigger the defer path, or every stylesheet would be made
+		// async with no critical CSS inlined → whole template renders unstyled.
+		if ( file_exists( $cache_file ) && filesize( $cache_file ) > 0 ) {
 			// Serve Used CSS: inline it, dequeue the originals, defer full CSS.
 			add_action( 'wp_head', array( __CLASS__, 'inline_used_css' ), 1 );
 			add_filter( 'style_loader_tag', array( __CLASS__, 'defer_stylesheet' ), 10, 4 );
 		} else {
-			// Not generated yet — queue background job, serve original CSS this time.
+			// Not generated yet (or empty) — queue background job, serve original CSS.
 			self::queue_template( $key );
 		}
 	}
@@ -119,12 +123,17 @@ class TE_UnusedCSS {
 			}
 		}
 
+		// Preserve the original media attribute: a media-specific sheet (print, or a
+		// "screen and (max-width…)" query) must keep applying only in its context.
+		// Without this a print stylesheet would load as an unconditional screen sheet.
+		$media_attr = ( $media && 'all' !== $media ) ? sprintf( ' media="%s"', esc_attr( $media ) ) : '';
+
 		// Convert to preload + async pattern.
 		$deferred = sprintf(
-			'<link rel="preload" as="style" href="%s" onload="this.onload=null;this.rel=\'stylesheet\'">'
-			. '<noscript><link rel="stylesheet" href="%s"></noscript>',
+			'<link rel="preload" as="style" href="%1$s"%2$s onload="this.onload=null;this.rel=\'stylesheet\'">'
+			. '<noscript><link rel="stylesheet" href="%1$s"%2$s></noscript>',
 			esc_url( $href ),
-			esc_url( $href )
+			$media_attr
 		);
 
 		return $deferred;
@@ -138,8 +147,10 @@ class TE_UnusedCSS {
 	private static function queue_template( $key ) {
 		$store = get_option( self::STORE_OPTION, array( 'queue' => array(), 'generated' => array() ) );
 
-		// Avoid re-queueing the same key.
-		if ( in_array( $key, $store['queue'], true ) ) {
+		// Avoid re-queueing the same key. The queue is a key => url map, so check the
+		// KEY, not the values (the old in_array searched urls and never matched →
+		// every page view re-wrote the option).
+		if ( isset( $store['queue'][ $key ] ) ) {
 			return;
 		}
 
@@ -169,7 +180,11 @@ class TE_UnusedCSS {
 
 		foreach ( $store['queue'] as $key => $url ) {
 			$used_css = self::compute_used_css( $url );
-			if ( false !== $used_css ) {
+			// Only cache a NON-EMPTY result. An empty computed Used-CSS (every
+			// stylesheet unfetchable — CDN/other host) must not be cached, or
+			// maybe_apply would defer all CSS with nothing inlined (unstyled page).
+			// Leaving the key unqueued lets a later request re-queue it.
+			if ( false !== $used_css && '' !== trim( (string) $used_css ) ) {
 				$cache_file = self::get_cache_dir() . '/' . $key . '.css';
 				file_put_contents( $cache_file, $used_css ); // phpcs:ignore
 				$store['generated'][ $key ] = time();
@@ -285,44 +300,125 @@ class TE_UnusedCSS {
 		// Strip comments.
 		$css = preg_replace( '!/\*.*?\*/!s', '', $css );
 
-		$output = '';
-
-		// Always keep at-rules that affect rendering globally.
-		// Match rule blocks: selector { declarations }
-		if ( ! preg_match_all( '/([^{}]+)\{([^{}]*)\}/s', $css, $rules, PREG_SET_ORDER ) ) {
-			return $css; // Can't parse — keep everything (safe).
+		// Brace-aware split: the old flat regex /([^{}]+)\{([^{}]*)\}/ could not see
+		// nested braces, so it STRIPPED @media/@supports wrappers (promoting their
+		// inner rules to global scope) and mangled @keyframes. Parse real top-level
+		// blocks instead; on any imbalance keep everything (safe).
+		$blocks = self::split_top_level_blocks( $css );
+		if ( null === $blocks ) {
+			return $css;
 		}
 
-		foreach ( $rules as $rule ) {
-			$selector_group = trim( $rule[1] );
-			$declarations   = trim( $rule[2] );
+		$output = '';
+		foreach ( $blocks as $block ) {
+			$selector = trim( $block['selector'] );
+			$body     = $block['body'];
 
-			// Keep at-rules and root/global selectors unconditionally.
-			if ( '' === $selector_group
-				|| 0 === strpos( $selector_group, '@' )
-				|| false !== strpos( $selector_group, ':root' )
-				|| false !== strpos( $selector_group, 'html' )
-				|| false !== strpos( $selector_group, 'body' )
-				|| false !== strpos( $selector_group, '*' ) ) {
-				$output .= $selector_group . '{' . $declarations . '}';
+			// Keep at-rules (@media, @supports, @keyframes, @font-face, @page, …)
+			// WHOLE, including nested content — never flatten or filter inside them.
+			// Correctness (responsive rules + animations intact) over a marginally
+			// smaller file. Also keep root/global selectors unconditionally.
+			if ( '' === $selector
+				|| '@' === $selector[0]
+				|| false !== strpos( $selector, ':root' )
+				|| false !== strpos( $selector, 'html' )
+				|| false !== strpos( $selector, 'body' )
+				|| false !== strpos( $selector, '*' ) ) {
+				$output .= $selector . '{' . $body . '}';
 				continue;
 			}
 
-			// Check each selector in the group.
 			$keep = false;
-			foreach ( explode( ',', $selector_group ) as $selector ) {
-				if ( self::selector_is_used( trim( $selector ), $tokens ) ) {
+			foreach ( explode( ',', $selector ) as $one ) {
+				if ( self::selector_is_used( trim( $one ), $tokens ) ) {
 					$keep = true;
 					break;
 				}
 			}
-
 			if ( $keep ) {
-				$output .= $selector_group . '{' . $declarations . '}';
+				$output .= $selector . '{' . $body . '}';
 			}
 		}
 
 		return $output;
+	}
+
+	/**
+	 * Split CSS into top-level { selector => body } blocks, honoring brace nesting
+	 * (so @media/@keyframes bodies stay intact) and quoted strings (so a brace
+	 * inside content:"{" or a data: URL does not throw off the depth count).
+	 *
+	 * @param string $css CSS (comments already stripped).
+	 * @return array|null Array of ['selector'=>..., 'body'=>...], or null if braces
+	 *                    are unbalanced (caller then keeps the CSS untouched).
+	 */
+	private static function split_top_level_blocks( $css ) {
+		$blocks         = array();
+		$len            = strlen( $css );
+		$i              = 0;
+		$selector_start = 0;
+		$in_str         = false;
+		$str_char       = '';
+
+		while ( $i < $len ) {
+			$ch = $css[ $i ];
+
+			if ( $in_str ) {
+				if ( $ch === $str_char && ( 0 === $i || '\\' !== $css[ $i - 1 ] ) ) {
+					$in_str = false;
+				}
+				$i++;
+				continue;
+			}
+			if ( '"' === $ch || "'" === $ch ) {
+				$in_str   = true;
+				$str_char = $ch;
+				$i++;
+				continue;
+			}
+
+			if ( '{' === $ch ) {
+				$selector   = substr( $css, $selector_start, $i - $selector_start );
+				$depth      = 1;
+				$j          = $i + 1;
+				$body_start = $j;
+				$b_in_str   = false;
+				$b_char     = '';
+				while ( $j < $len && $depth > 0 ) {
+					$cj = $css[ $j ];
+					if ( $b_in_str ) {
+						if ( $cj === $b_char && '\\' !== $css[ $j - 1 ] ) {
+							$b_in_str = false;
+						}
+						$j++;
+						continue;
+					}
+					if ( '"' === $cj || "'" === $cj ) {
+						$b_in_str = true;
+						$b_char   = $cj;
+						$j++;
+						continue;
+					}
+					if ( '{' === $cj ) {
+						$depth++;
+					} elseif ( '}' === $cj ) {
+						$depth--;
+					}
+					$j++;
+				}
+				if ( 0 !== $depth ) {
+					return null; // Unbalanced — bail, keep everything.
+				}
+				$body           = substr( $css, $body_start, ( $j - 1 ) - $body_start );
+				$blocks[]       = array( 'selector' => $selector, 'body' => $body );
+				$i              = $j;
+				$selector_start = $i;
+			} else {
+				$i++;
+			}
+		}
+
+		return $blocks;
 	}
 
 	/**
@@ -406,19 +502,43 @@ class TE_UnusedCSS {
 	 * @return string
 	 */
 	private static function get_template_key() {
-		if ( is_front_page() ) { return 'front-page'; }
-		if ( is_home() )       { return 'blog-home'; }
-		if ( is_singular() ) {
-			// sanitize_key() guarantees a safe filename fragment (lowercase,
-			// alphanumeric, _ and - only) — no path traversal via a crafted
-			// post type slug.
-			return 'singular-' . sanitize_key( (string) get_post_type() );
+		// All keys pass through sanitize_key() shape (lowercase, alphanumeric, _ and -
+		// only) — no path traversal via a crafted slug.
+		$key = 'generic';
+		if ( is_front_page() ) {
+			$key = 'front-page';
+		} elseif ( is_home() ) {
+			$key = 'blog-home';
+		} elseif ( is_singular() ) {
+			$key = 'singular-' . sanitize_key( (string) get_post_type() );
+		} elseif ( is_category() || is_tax() ) {
+			// Section archives: key PER TERM. On a news site different sections can
+			// have different layouts/classes, so a single "taxonomy" key would serve
+			// one section's critical CSS on another (FOUC). Term count is bounded.
+			$term = get_queried_object();
+			$key  = ( $term instanceof \WP_Term )
+				? 'tax-' . sanitize_key( $term->taxonomy ) . '-' . (int) $term->term_id
+				: 'taxonomy';
+		} elseif ( is_tag() ) {
+			// Tags can be very numerous; keep them under one key to bound storage.
+			$key = 'tag-archive';
+		} elseif ( is_post_type_archive() ) {
+			$key = 'archive-' . sanitize_key( (string) get_post_type() );
+		} elseif ( is_archive() ) {
+			$key = 'archive';
+		} elseif ( is_search() ) {
+			$key = 'search';
+		} elseif ( is_404() ) {
+			$key = 'notfound';
 		}
-		if ( is_category() || is_tag() || is_tax() ) { return 'taxonomy'; }
-		if ( is_archive() )    { return 'archive'; }
-		if ( is_search() )     { return 'search'; }
-		if ( is_404() )        { return 'notfound'; }
-		return 'generic';
+
+		/**
+		 * Filter the Used-CSS template key (controls how finely Used CSS is split
+		 * and reused across pages). Return a sanitize_key-safe string.
+		 *
+		 * @param string $key Computed template key.
+		 */
+		return sanitize_key( (string) apply_filters( 'flavor_edge_ucss_template_key', $key ) );
 	}
 
 	/**

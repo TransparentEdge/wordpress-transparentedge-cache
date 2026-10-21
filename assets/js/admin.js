@@ -253,10 +253,11 @@
 
     $(document).on('click', '#te-wizard-skip', function () {
         $('#te-wizard').slideUp();
+        // Dismiss only — must NOT save settings. Posting an empty settings payload
+        // to the save handler used to reset every checkbox (incl. the master switch).
         $.post(FE.ajaxUrl, {
-            action: 'flavor_edge_save_settings',
-            nonce:  FE.nonce,
-            settings: {}  // Empty save just to dismiss.
+            action: 'flavor_edge_wizard_dismiss',
+            nonce:  FE.nonce
         });
     });
 
@@ -369,6 +370,27 @@
             } else {
                 alert(res && res.message ? res.message : 'Error enabling Object Cache');
                 $btn.text('Enable ' + backend.charAt(0).toUpperCase() + backend.slice(1));
+            }
+        });
+    });
+
+    $(document).on('click', '.te-replace-object-cache', function () {
+        var $btn = $(this);
+        var backend = $btn.data('backend');
+        if (!confirm('Replace the existing object-cache.php from another plugin with Transparent Edge (' + backend + ')? The current drop-in will be backed up to wp-content/cache/flavor-edge/ first.')) return;
+
+        $btn.prop('disabled', true).text('Replacing...');
+        $.post(FE.ajaxUrl, {
+            action: 'flavor_edge_replace_object_cache',
+            nonce:  FE.nonce,
+            backend: backend
+        }, function (res) {
+            $btn.prop('disabled', false);
+            if (res && res.success) {
+                location.reload();
+            } else {
+                alert(res && res.message ? res.message : 'Error replacing Object Cache');
+                $btn.text('Replace with ours');
             }
         });
     });

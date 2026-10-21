@@ -70,6 +70,9 @@ class TE_Core {
 		// Heartbeat API control.
 		TE_Heartbeat::init();
 
+		// Editorial write controls (revisions + autosave; opt-in).
+		TE_Editorial::init();
+
 		// WooCommerce integration (only if WooCommerce is active).
 		TE_WooCommerce::init();
 

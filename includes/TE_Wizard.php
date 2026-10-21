@@ -131,7 +131,7 @@ class TE_Wizard {
 			'enabled'              => true,
 			'headers_enabled'      => true,
 			'surrogate_keys'       => true,
-			'vary_device'          => true,
+			'vary_device'          => false, // (T2.14) Keep device-based cache fragmentation OFF; the wizard must not undo the v1.9 anti-fragmentation migration.
 			'invalidation_enabled' => true,
 			'invalidation_method'  => 'soft',
 			'refetch_enabled'      => true,

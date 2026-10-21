@@ -146,11 +146,26 @@ defined( 'ABSPATH' ) || exit;
 					$oc_dropin = \flavor_edge\TE_ObjectCache::get_dropin_status();
 					$backends = \flavor_edge\TE_ObjectCache::detect_backends();
 					?>
-					<span class="te-dash-value" style="color:<?php echo $oc_stats['enabled'] ? '#155724' : '#888'; ?>;">
-						<?php echo $oc_stats['enabled'] ? esc_html( $oc_stats['hit_ratio'] . '% hit ratio' ) : esc_html__( 'Disabled', 'flavor-edge-cache' ); ?>
+					<?php $oc_foreign = ( $oc_dropin['installed'] && ! $oc_dropin['ours'] ); ?>
+					<span class="te-dash-value" style="color:<?php echo ! empty( $oc_stats['degraded'] ) ? '#b32d2e' : ( ( $oc_stats['enabled'] && ! $oc_foreign ) ? '#155724' : '#888' ); ?>;">
+						<?php
+						if ( $oc_foreign ) {
+							esc_html_e( 'Blocked', 'flavor-edge-cache' );
+						} elseif ( ! empty( $oc_stats['degraded'] ) ) {
+							esc_html_e( 'Not persistent', 'flavor-edge-cache' );
+						} elseif ( $oc_stats['enabled'] ) {
+							echo esc_html( $oc_stats['hit_ratio'] . '% hit ratio' );
+						} else {
+							esc_html_e( 'Disabled', 'flavor-edge-cache' );
+						}
+						?>
 					</span>
 					<span class="te-dash-detail">
-						<?php if ( $oc_stats['enabled'] ) : ?>
+						<?php if ( $oc_foreign ) : ?>
+							<span style="color:#856404;">⚠ <?php printf( esc_html__( 'A drop-in from "%s" is in the way — our object cache can\'t run until it is replaced or removed.', 'flavor-edge-cache' ), esc_html( $oc_dropin['other'] ) ); ?></span>
+						<?php elseif ( ! empty( $oc_stats['degraded'] ) ) : ?>
+							<span style="color:#b32d2e;">⚠ <?php printf( esc_html__( '%s backend not answering — recomputing against the database on every request.', 'flavor-edge-cache' ), esc_html( ucfirst( (string) $oc_stats['backend'] ) ) ); ?></span>
+						<?php elseif ( $oc_stats['enabled'] ) : ?>
 							<?php echo esc_html( number_format( $oc_stats['hits'] ) ); ?> hits / <?php echo esc_html( number_format( $oc_stats['misses'] ) ); ?> misses
 						<?php elseif ( $backends['recommended'] ) : ?>
 							<?php echo esc_html( ucfirst( $backends['recommended'] ) . ' available' ); ?>
@@ -158,17 +173,24 @@ defined( 'ABSPATH' ) || exit;
 							<?php if ( ! empty( $backends['redis_needs_auth'] ) ) : ?>
 								<span style="color:#856404;">⚠ <?php esc_html_e( 'Redis server detected, but requires a password.', 'flavor-edge-cache' ); ?></span>
 								<br><code style="font-size:11px;background:#f0f0f0;padding:2px 6px;">define('WP_REDIS_PASSWORD', 'your-password');</code>
-								<br><span class="description" style="font-size:11px;"><?php esc_html_e( 'Add this to wp-config.php, then install phpredis:', 'flavor-edge-cache' ); ?></span>
-								<br><code style="font-size:11px;background:#f0f0f0;padding:2px 6px;">sudo apt install php-redis && sudo systemctl restart php-fpm</code>
+								<br><span class="description" style="font-size:11px;"><?php esc_html_e( 'Add this to wp-config.php.', 'flavor-edge-cache' ); ?></span>
+								<?php if ( ! extension_loaded( 'redis' ) ) : ?>
+									<br><span class="description" style="font-size:11px;"><?php esc_html_e( 'Then install phpredis:', 'flavor-edge-cache' ); ?></span>
+									<br><code style="font-size:11px;background:#f0f0f0;padding:2px 6px;">sudo apt install php-redis && sudo systemctl restart php-fpm</code>
+								<?php endif; ?>
 							<?php else : ?>
 								<span style="color:#856404;">⚠ <?php esc_html_e( 'Redis server detected, but PHP extension (phpredis) is not installed.', 'flavor-edge-cache' ); ?></span>
 								<br><code style="font-size:11px;background:#f0f0f0;padding:2px 6px;">sudo apt install php-redis && sudo systemctl restart php-fpm</code>
 							<?php endif; ?>
+						<?php elseif ( ! empty( $backends['redis_down'] ) ) : ?>
+							<span style="color:#856404;">⚠ <?php esc_html_e( 'Redis is configured but not answering — start the service, or check WP_REDIS_HOST / WP_REDIS_PORT.', 'flavor-edge-cache' ); ?></span>
 						<?php else : ?>
 							<?php esc_html_e( 'No backend detected', 'flavor-edge-cache' ); ?>
 						<?php endif; ?>
 					</span>
-					<?php if ( ! $oc_stats['enabled'] && ! empty( $backends['recommended'] ) ) : ?>
+					<?php if ( $oc_foreign && ! empty( $backends['recommended'] ) ) : ?>
+						<button type="button" class="button button-small te-replace-object-cache" data-backend="<?php echo esc_attr( $backends['recommended'] ); ?>" style="margin-top:8px;"><?php esc_html_e( 'Replace with ours', 'flavor-edge-cache' ); ?></button>
+					<?php elseif ( ! $oc_stats['enabled'] && ! empty( $backends['recommended'] ) ) : ?>
 						<button type="button" class="button button-small te-enable-object-cache" data-backend="<?php echo esc_attr( $backends['recommended'] ); ?>" style="margin-top:8px;">
 							<?php printf( esc_html__( 'Enable %s', 'flavor-edge-cache' ), esc_html( ucfirst( $backends['recommended'] ) ) ); ?>
 						</button>
@@ -203,7 +225,15 @@ defined( 'ABSPATH' ) || exit;
 						— <?php echo esc_html( (int) $settings['page_cache_ttl'] ); ?>s TTL
 					</span>
 					<?php if ( ! $pc_available ) : ?>
-							<span class="te-dash-detail" style="color:#b32d2e;">⚠ <?php printf( esc_html__( '%s selected but its PHP extension is not installed — nothing would be cached. Pick Disk, or install the extension.', 'flavor-edge-cache' ), esc_html( ucfirst( $pc_backend ) ) ); ?></span>
+							<span class="te-dash-detail" style="color:#b32d2e;">⚠ <?php
+							if ( 'redis' === $pc_backend && ! empty( $backends['redis_needs_auth'] ) ) {
+								esc_html_e( 'Redis is selected but password-protected — set WP_REDIS_PASSWORD in wp-config.php, or pick Disk.', 'flavor-edge-cache' );
+							} elseif ( 'redis' === $pc_backend && ! empty( $backends['redis_down'] ) ) {
+								esc_html_e( 'Redis is selected but not answering — start the service, or pick Disk.', 'flavor-edge-cache' );
+							} else {
+								printf( esc_html__( '%s selected but its PHP extension is not installed — nothing would be cached. Pick Disk, or install the extension.', 'flavor-edge-cache' ), esc_html( ucfirst( $pc_backend ) ) );
+							}
+							?></span>
 						<?php endif; ?>
 						<?php if ( ! $pc_on ) : ?>
 						<button type="button" class="button button-small te-enable-page-cache"<?php echo $pc_available ? '' : ' disabled title="' . esc_attr__( 'The selected backend is not available on this server.', 'flavor-edge-cache' ) . '"'; ?> style="margin-top:8px;"><?php esc_html_e( 'Enable', 'flavor-edge-cache' ); ?></button>
@@ -416,7 +446,7 @@ defined( 'ABSPATH' ) || exit;
 								<label style="display:block;margin-bottom:6px;">
 									<input type="radio" name="page_cache_backend" value="redis" <?php checked( $settings['page_cache_backend'], 'redis' ); ?> />
 									<strong><?php esc_html_e( 'Redis', 'flavor-edge-cache' ); ?></strong>
-									<?php if ( ! empty( $backends['redis'] ) ) : ?><span style="color:#155724;font-weight:600;">✓ <?php esc_html_e( 'Available', 'flavor-edge-cache' ); ?></span><?php elseif ( ! empty( $backends['redis_server'] ) ) : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Redis server detected, but the phpredis extension is not installed — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php else : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Not available on this server — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php endif; ?>
+									<?php if ( ! empty( $backends['redis'] ) ) : ?><span style="color:#155724;font-weight:600;">✓ <?php esc_html_e( 'Available', 'flavor-edge-cache' ); ?></span><?php elseif ( ! empty( $backends['redis_needs_auth'] ) ) : ?><span style="color:#b36b00;font-weight:600;">⚠ <?php esc_html_e( 'Redis detected but password-protected — set WP_REDIS_PASSWORD in wp-config.php.', 'flavor-edge-cache' ); ?></span><?php elseif ( ! empty( $backends['redis_server'] ) ) : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Redis server detected, but the phpredis extension is not installed — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php elseif ( ! empty( $backends['redis_down'] ) ) : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Redis is configured but not answering — start the service or check WP_REDIS_HOST / WP_REDIS_PORT.', 'flavor-edge-cache' ); ?></span><?php else : ?><span style="color:#b32d2e;font-weight:600;">⚠ <?php esc_html_e( 'Not available on this server — selecting this would cache nothing.', 'flavor-edge-cache' ); ?></span><?php endif; ?>
 										— <?php esc_html_e( 'In-memory key lookup, no disk I/O: faster under concurrency and better at indexing than disk. Reuses your WP_REDIS_* settings. Requires the Redis service and the phpredis extension.', 'flavor-edge-cache' ); ?>
 								</label>
 								<label style="display:block;margin-bottom:6px;">
@@ -436,6 +466,25 @@ defined( 'ABSPATH' ) || exit;
 							<span class="description"><?php esc_html_e( 'seconds. Default: 300. It is only a fallback for edge misses, so a short value is fine; a purge clears it anyway.', 'flavor-edge-cache' ); ?></span>
 						</td>
 					</tr>
+
+				<tr>
+					<th colspan="2"><h3 style="margin:1em 0 0"><?php esc_html_e( 'Object cache (protects logged-in users and wp-admin)', 'flavor-edge-cache' ); ?></h3></th>
+				</tr>
+				<tr>
+					<th colspan="2">
+						<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'Page cache only covers anonymous visitors. Your editors, and every wp-admin and admin-ajax request, bypass it and hit the database directly. A persistent object cache (Redis or Memcached) absorbs that load. Without one, a busy newsroom can overwhelm MySQL even with page cache on.', 'flavor-edge-cache' ); ?></p>
+					</th>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Automatic', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="object_cache_auto" value="1" <?php checked( ! empty( $settings['object_cache_auto'] ) ); ?> />
+							<?php esc_html_e( 'Enable the object cache automatically when a live memory backend (Redis or Memcached) is detected', 'flavor-edge-cache' ); ?>
+						</label>
+						<p class="description" style="margin-top:4px;"><?php esc_html_e( 'Recommended. When off, you must enable the object cache by hand from the card at the top. It never overwrites an object-cache.php from another plugin without your confirmation.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
 
 				<tr>
 					<th colspan="2"><h3 style="margin:0"><?php esc_html_e( 'Static Resources (CSS, JS, images, fonts, video)', 'flavor-edge-cache' ); ?></h3></th>
@@ -982,6 +1031,36 @@ defined( 'ABSPATH' ) || exit;
 						<label><input type="checkbox" name="heartbeat_disable_editor" value="1" <?php checked( $settings['heartbeat_disable_editor'] ); ?> />
 						<?php esc_html_e( 'Disable Heartbeat in the post editor (warning: disables autosave)', 'flavor-edge-cache' ); ?></label>
 						<p class="description" style="color:#a00;"><?php esc_html_e( 'Use with caution. Without autosave, unsaved work is lost if the browser crashes.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+
+				<tr>
+					<th colspan="2"><h3><?php esc_html_e( 'Editorial write load (revisions &amp; autosave)', 'flavor-edge-cache' ); ?></h3></th>
+				</tr>
+				<tr>
+					<th colspan="2">
+						<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'Every autosave tick and every stored revision is a database write on the logged-in path, which no cache can absorb. On an editor-heavy site this adds up. These controls are optional and change nothing until enabled.', 'flavor-edge-cache' ); ?></p>
+					</th>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( 'Enable', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="editorial_tune" value="1" <?php checked( ! empty( $settings['editorial_tune'] ) ); ?> />
+						<?php esc_html_e( 'Apply the revision and autosave limits below', 'flavor-edge-cache' ); ?></label>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="editorial_revisions"><?php esc_html_e( 'Revisions to keep', 'flavor-edge-cache' ); ?></label></th>
+					<td>
+						<input type="number" id="editorial_revisions" name="editorial_revisions" value="<?php echo esc_attr( $settings['editorial_revisions'] ); ?>" min="-1" class="small-text" />
+						<span class="description"><?php esc_html_e( '-1 = leave WordPress alone (default). 0 = disable revisions. A positive number keeps that many per post.', 'flavor-edge-cache' ); ?></span>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="editorial_autosave"><?php esc_html_e( 'Autosave interval', 'flavor-edge-cache' ); ?></label></th>
+					<td>
+						<input type="number" id="editorial_autosave" name="editorial_autosave" value="<?php echo esc_attr( $settings['editorial_autosave'] ); ?>" min="0" max="600" class="small-text" />
+						<span class="description"><?php esc_html_e( 'seconds. 0 = leave WordPress default (60s). Otherwise clamped to 60-600. Ignored if AUTOSAVE_INTERVAL is set in wp-config.php.', 'flavor-edge-cache' ); ?></span>
 					</td>
 				</tr>
 

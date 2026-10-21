@@ -232,7 +232,11 @@ class TE_PageCache {
 			. "defined( 'ABSPATH' ) || exit;\n"
 			. 'return ' . var_export( $config, true ) . ";\n";
 
-		return false !== @file_put_contents( self::config_file(), $code, LOCK_EX );
+		// Atomic write: the serve drop-in `include`s this config PRE-BOOT on every
+		// cacheable request, and it is rewritten on every admin_init / settings save,
+		// so an in-place write could be read half-formed under load → parse error in
+		// a pre-boot include → white screen. Same guarantee as the other drop-ins.
+		return TE_ObjectCache::write_atomic( self::config_file(), $code );
 	}
 
 	private static function ensure_dirs() {
@@ -419,17 +423,91 @@ class TE_PageCache {
 		if ( ! self::is_enabled() || empty( $urls ) ) {
 			return;
 		}
-		$store   = self::store();
-		$ignored = self::rules_config()['accepted_query_strings'];
+		$store    = self::store();
+		$ignored  = self::rules_config()['accepted_query_strings'];
+		$variants = self::purge_variants();
 		foreach ( (array) $urls as $url ) {
 			$parts = wp_parse_url( $url );
 			$host  = isset( $parts['host'] ) ? $parts['host'] : (string) wp_parse_url( home_url(), PHP_URL_HOST );
 			$uri   = ( isset( $parts['path'] ) ? $parts['path'] : '/' ) . ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' );
 			$uri   = TE_PageCache_Store::effective_uri( $uri, $ignored );
-			foreach ( array( 'desktop', 'mobile', 'app' ) as $device ) {
-				$store->delete( $store->key( $host, $uri, $device ) );
+			foreach ( $variants as $variant ) {
+				$store->delete( $store->key( $host, $uri, $variant ) );
 			}
 		}
+	}
+
+	/**
+	 * The cache-key variants a URL can be stored under. The key is a one-way hash
+	 * of host|uri|variant, so a surgical purge must reconstruct every variant that
+	 * could have been written — there is no prefix delete.
+	 *
+	 * Device buckets always. When vary_language is on, the variant also carries the
+	 * visitor's primary Accept-Language tag, which is free-form; we enumerate the
+	 * site's own configured languages (WPML/Polylang) as the realistic set. A
+	 * variant from an exotic Accept-Language not in that set rides the short
+	 * page-cache TTL (default 300s) and self-heals. The language list is filterable
+	 * via `flavor_edge_pc_purge_languages` for exact control. (For URL-based i18n —
+	 * each language on its own URL — keep vary_language OFF; those purge normally.)
+	 *
+	 * @return array Variant strings.
+	 */
+	private static function purge_variants() {
+		$devices = array( 'desktop', 'mobile', 'app' );
+		if ( empty( self::rules_config()['vary_language'] ) ) {
+			return $devices;
+		}
+		$langs    = self::site_language_codes();
+		$variants = $devices;
+		foreach ( $devices as $device ) {
+			foreach ( $langs as $lang ) {
+				$variants[] = $device . '|' . $lang;
+			}
+		}
+		return array_values( array_unique( $variants ) );
+	}
+
+	/**
+	 * The site's configured language codes, normalised to cache_variant()'s shape.
+	 * Best-effort from WPML and Polylang; empty when neither is active.
+	 *
+	 * @return array
+	 */
+	private static function site_language_codes() {
+		$codes = array();
+
+		$wpml = apply_filters( 'wpml_active_languages', null, array() );
+		if ( is_array( $wpml ) ) {
+			foreach ( array_keys( $wpml ) as $code ) {
+				$codes[] = $code;
+			}
+		}
+		if ( function_exists( 'pll_languages_list' ) ) {
+			foreach ( (array) pll_languages_list() as $code ) {
+				$codes[] = $code;
+			}
+		}
+
+		$out = array();
+		foreach ( $codes as $code ) {
+			// Mirror cache_variant(): lowercase, first 5 chars, [a-z-] only.
+			$code = preg_replace( '/[^a-z-]/', '', strtolower( substr( (string) $code, 0, 5 ) ) );
+			if ( '' === $code ) {
+				continue;
+			}
+			$out[] = $code;
+			// Browsers commonly send a region subtag (es -> es-es); cover the obvious one.
+			if ( 2 === strlen( $code ) && false === strpos( $code, '-' ) ) {
+				$out[] = $code . '-' . $code;
+			}
+		}
+
+		/**
+		 * Filter the language codes a surgical purge clears when vary_language is on.
+		 *
+		 * @param array $out Normalised language codes.
+		 */
+		return array_values( array_unique( apply_filters( 'flavor_edge_pc_purge_languages', $out ) ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -448,7 +526,10 @@ class TE_PageCache {
 				'message' => __( 'Another advanced-cache.php drop-in is already installed. Remove it first.', 'flavor-edge-cache' ),
 			);
 		}
-		if ( false === @file_put_contents( $dropin, self::generate_dropin() ) ) {
+		// Written atomically (temp + rename): WordPress includes advanced-cache.php on
+		// every request with no lock, so an in-place write could be read half-formed
+		// by a concurrent worker → parse error → site-wide white screen.
+		if ( ! TE_ObjectCache::write_atomic( $dropin, self::generate_dropin() ) ) {
 			return array(
 				'success' => false,
 				'message' => __( 'Could not write advanced-cache.php. Check permissions on wp-content/.', 'flavor-edge-cache' ),
@@ -574,7 +655,9 @@ class TE_PageCache {
 		$backup = self::base_dir() . '/wp-config-' . substr( md5( $path ), 0, 10 ) . '.bak.php';
 		@file_put_contents( $backup, "<?php exit; __halt_compiler();\n" . $contents, LOCK_EX );
 
-		if ( false === @file_put_contents( $path, $new, LOCK_EX ) ) {
+		// Atomic write (temp + rename, preserving perms/symlink): wp-config.php is
+		// included on every request, so a half-written file is instant site death.
+		if ( ! TE_ObjectCache::write_atomic( $path, $new ) ) {
 			// Best-effort rollback from the copy we still hold in memory, and keep
 			// the guarded backup on disk for manual recovery of this rare failure.
 			@file_put_contents( $path, $contents, LOCK_EX );

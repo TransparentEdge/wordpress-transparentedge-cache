@@ -232,6 +232,15 @@ class TE_Multisite {
 			'auto_activate'     => ! empty( $_POST['auto_activate'] ),
 		);
 
+		// (T2.13) Encrypt network-level credentials at rest with the same AES scheme
+		// used for site-level creds, instead of writing them to sitemeta in plaintext.
+		// company_id is not in ENCRYPTED_FIELDS, so it stays plaintext.
+		foreach ( TE_Settings::ENCRYPTED_FIELDS as $field ) {
+			if ( ! empty( $settings[ $field ] ) ) {
+				$settings[ $field ] = TE_Settings::encrypt_value( $settings[ $field ] );
+			}
+		}
+
 		update_site_option( self::NETWORK_OPTION_KEY, $settings );
 
 		wp_send_json_success();
@@ -253,7 +262,18 @@ class TE_Multisite {
 
 		$saved = get_site_option( self::NETWORK_OPTION_KEY, array() );
 
-		return wp_parse_args( $saved, $defaults );
+		$settings = wp_parse_args( $saved, $defaults );
+
+		// (T2.13) Decrypt network-level credentials symmetrically. A value WITHOUT
+		// the ENC_PREFIX is treated as legacy plaintext and used as-is (it will be
+		// re-encrypted the next time the network settings are saved).
+		foreach ( TE_Settings::ENCRYPTED_FIELDS as $field ) {
+			if ( ! empty( $settings[ $field ] ) && 0 === strpos( $settings[ $field ], TE_Settings::ENC_PREFIX ) ) {
+				$settings[ $field ] = TE_Settings::decrypt_value( $settings[ $field ] );
+			}
+		}
+
+		return $settings;
 	}
 
 	/**

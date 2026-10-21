@@ -205,32 +205,51 @@ class TE_Hardening {
 	}
 
 	/**
-	 * Get the client IP.
+	 * Get the client IP used to key the login limiter.
 	 *
-	 * Behind the Transparent Edge CDN, the real visitor IP is delivered in the
-	 * True-Client-IP header. We check it first, then fall back to the standard
-	 * forwarded headers. This prevents counting login failures against a shared
-	 * edge IP (which could lock out unrelated visitors).
+	 * SECURITY (T2.15): forwarded headers (True-Client-IP / X-Forwarded-For) are
+	 * attacker-controlled when the origin is reachable directly (bypassing the CDN).
+	 * Trusting them lets an attacker rotate IPs to evade the limiter, or pin a
+	 * victim's IP to lock them out. So by DEFAULT we key on REMOTE_ADDR (the socket
+	 * peer, which cannot be spoofed). A forwarded header is honored ONLY when the
+	 * site explicitly opts in via the `flavor_edge_trust_forwarded_ip` filter — e.g.
+	 * when the origin is firewalled to accept connections solely from the CDN edge —
+	 * and even then we take the FIRST PUBLIC IP of X-Forwarded-For, never a raw
+	 * attacker-controlled string.
 	 *
 	 * @return string
 	 */
 	private static function get_client_ip() {
-		$headers = array(
-			'HTTP_TRUE_CLIENT_IP',   // Transparent Edge / CDN real client IP.
-			'HTTP_X_FORWARDED_FOR',
-			'HTTP_X_REAL_IP',
-			'REMOTE_ADDR',
-		);
-		foreach ( $headers as $h ) {
-			if ( ! empty( $_SERVER[ $h ] ) ) {
-				$ips = explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $h ] ) ) );
-				$ip  = trim( $ips[0] );
-				// Basic validation — ignore obviously invalid values.
-				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-					return $ip;
+		$remote_addr = isset( $_SERVER['REMOTE_ADDR'] )
+			? trim( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) )
+			: '';
+
+		// Default (and safe fallback): the un-spoofable socket peer.
+		if ( ! apply_filters( 'flavor_edge_trust_forwarded_ip', false ) ) {
+			return filter_var( $remote_addr, FILTER_VALIDATE_IP ) ? $remote_addr : '0.0.0.0';
+		}
+
+		// Opted in: the edge delivers the real client IP in True-Client-IP (single value).
+		if ( ! empty( $_SERVER['HTTP_TRUE_CLIENT_IP'] ) ) {
+			$tcip = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_TRUE_CLIENT_IP'] ) ) );
+			if ( filter_var( $tcip, FILTER_VALIDATE_IP ) ) {
+				return $tcip;
+			}
+		}
+
+		// Otherwise take the FIRST PUBLIC IP from X-Forwarded-For. Skipping private/
+		// reserved ranges defeats an attacker who prepends spoofed internal hops.
+		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+			$ips = explode( ',', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) );
+			foreach ( $ips as $candidate ) {
+				$candidate = trim( $candidate );
+				if ( filter_var( $candidate, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+					return $candidate;
 				}
 			}
 		}
-		return '0.0.0.0';
+
+		// Opted in but no usable forwarded IP — fall back to the socket peer.
+		return filter_var( $remote_addr, FILTER_VALIDATE_IP ) ? $remote_addr : '0.0.0.0';
 	}
 }
