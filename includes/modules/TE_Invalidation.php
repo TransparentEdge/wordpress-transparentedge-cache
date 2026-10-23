@@ -285,6 +285,25 @@ class TE_Invalidation {
 			return;
 		}
 
+		/**
+		 * Whether to run a full (soft) purge when a plugin is activated or
+		 * deactivated. A full purge is the safe default — a plugin can change
+		 * any part of the front end — but on a site with a very large URL set it
+		 * can be a lot to revalidate at once, so allow it to be scoped to certain
+		 * plugins or switched off without unchecking the setting. Returning false
+		 * skips the full purge; surgical content purges are unaffected.
+		 *
+		 * @param bool   $do_purge Default true (preserves existing behaviour).
+		 * @param string $plugin   The plugin basename being activated/deactivated.
+		 */
+		if ( ! apply_filters( 'flavor_edge_full_purge_on_plugin_change', true, $plugin ) ) {
+			// Used CSS still depends on the active plugin set — keep it fresh.
+			if ( class_exists( __NAMESPACE__ . '\\TE_UnusedCSS' ) ) {
+				TE_UnusedCSS::clear_cache();
+			}
+			return;
+		}
+
 		self::$full_purge_pending = true;
 
 		// Active plugins affect Used CSS — regenerate.
@@ -397,6 +416,15 @@ class TE_Invalidation {
 			set_transient( $key, 1, $debounce );
 		}
 
+		// S2 (fragile origin + many editors): by default warm (refetch) ONLY the
+		// published post's own permalink. The home, section/term archives, author and
+		// type archives are PURGED by their Surrogate-Key tags below and served
+		// stale-instantly by grace — so proactively REFETCHING them on every publish
+		// is a self-inflicted hammer on a weak origin when many editors publish at
+		// once (each publish would regenerate the most expensive shared pages). A
+		// strong origin can opt back into proactive broad-page warming via the filter.
+		$warm_broad = (bool) apply_filters( 'flavor_edge_warm_broad_pages', false, $post_id, $post );
+
 		// The post itself.
 		self::$pending_tags[] = 'post-' . $post_id;
 
@@ -420,10 +448,13 @@ class TE_Invalidation {
 				foreach ( $terms as $term ) {
 					self::$pending_tags[] = 'term-' . $term->term_id;
 
-					// Collect term URL for warm-up.
-					$term_link = get_term_link( $term );
-					if ( ! is_wp_error( $term_link ) ) {
-						self::$warmup_urls[] = $term_link;
+					// Term archive URL — broad page, warmed only when opted in
+					// (otherwise evicted by the term-* tag above and served by grace).
+					if ( $warm_broad ) {
+						$term_link = get_term_link( $term );
+						if ( ! is_wp_error( $term_link ) ) {
+							self::$warmup_urls[] = $term_link;
+						}
 					}
 				}
 				self::$pending_tags[] = 'tax-' . $taxonomy;
@@ -438,22 +469,25 @@ class TE_Invalidation {
 		if ( $warm_self ) {
 			self::$warmup_urls[] = get_permalink( $post_id );
 		}
-		self::$warmup_urls[] = home_url( '/' );
 
-		// Post type archive URL (for CPTs).
-		$post_type_archive = get_post_type_archive_link( $post->post_type );
-		if ( $post_type_archive ) {
-			self::$warmup_urls[] = $post_type_archive;
+		// Broad, expensive-to-regenerate shared pages (home, type/blog/author
+		// archives): evicted by their tags above and served stale by grace. Warmed
+		// proactively ONLY when explicitly opted in — see $warm_broad above.
+		if ( $warm_broad ) {
+			self::$warmup_urls[] = home_url( '/' );
+
+			$post_type_archive = get_post_type_archive_link( $post->post_type );
+			if ( $post_type_archive ) {
+				self::$warmup_urls[] = $post_type_archive;
+			}
+
+			$blog_page_id = (int) get_option( 'page_for_posts' );
+			if ( $blog_page_id ) {
+				self::$warmup_urls[] = get_permalink( $blog_page_id );
+			}
+
+			self::$warmup_urls[] = get_author_posts_url( $post->post_author );
 		}
-
-		// Blog page (if different from front page).
-		$blog_page_id = (int) get_option( 'page_for_posts' );
-		if ( $blog_page_id ) {
-			self::$warmup_urls[] = get_permalink( $blog_page_id );
-		}
-
-		// Author archive.
-		self::$warmup_urls[] = get_author_posts_url( $post->post_author );
 
 		// Allow extensions to add more tags.
 		self::$pending_tags = apply_filters( 'flavor_edge_post_purge_tags', self::$pending_tags, $post_id, $post );
@@ -478,13 +512,32 @@ class TE_Invalidation {
 	const WARMUP_LOCK_TTL = 120; // seconds.
 
 	/**
+	 * Whether a URL points at a static asset (image/CSS/JS/font/media) rather than
+	 * an HTML document. Used to decide that a purge must evict only, never refetch.
+	 *
+	 * @param string $url URL to classify.
+	 * @return bool
+	 */
+	private static function is_static_asset_url( $url ) {
+		$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+		return (bool) preg_match( '/\.(jpe?g|png|gif|webp|avif|svg|ico|css|js|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf)$/i', $path );
+	}
+
+	/**
 	 * Flush the pending invalidation queue.
 	 * Called at shutdown to batch all purge requests.
 	 */
 	public static function flush_queue() {
+		// R1: the shutdown purge/refetch runs with a SHORT timeout (async flag) so a
+		// publish never holds a PHP-FPM worker for the full ~25-35s of serial HTTPS
+		// round-trips — each call is capped to a few seconds. Explicit purges (admin
+		// button, WP-CLI) stay fully synchronous. We deliberately do NOT call
+		// fastcgi_finish_request here: at shutdown it would flush and cut off other
+		// plugins' output and can clash with a co-resident page-cache plugin's buffer
+		// (e.g. W3TC during a migration) — a real risk on a plugin-heavy site.
 		// Full purge takes precedence.
 		if ( self::$full_purge_pending ) {
-			$result = TE_Api::purge_all();
+			$result = TE_Api::purge_all( false, true );
 			self::$full_purge_pending = false;
 			self::$pending_tags       = array();
 			self::$pending_urls       = array();
@@ -511,7 +564,7 @@ class TE_Invalidation {
 		// "menu-topBar" must purge the stored "menu-topbar" or the purge is a no-op.
 		$tags = array_unique( array_filter( array_map( 'sanitize_key', self::$pending_tags ) ) );
 		if ( ! empty( $tags ) ) {
-			$result = TE_Api::purge_tags( $tags, true );
+			$result = TE_Api::purge_tags( $tags, true, true );
 
 			do_action( 'flavor_edge_after_tag_purge', $result, $tags );
 
@@ -524,10 +577,35 @@ class TE_Invalidation {
 		// URL-based purge (always soft — fallback or explicit).
 		$urls = array_unique( array_filter( self::$pending_urls ) );
 		if ( ! empty( $urls ) ) {
-			$refetch = TE_Settings::get( 'refetch_enabled' );
-			$result  = TE_Api::purge_urls( $urls, true, $refetch );
+			// R7: never REFETCH static assets (images/CSS/JS/fonts). Their bytes do
+			// not change when a post is saved or an attachment's metadata is edited,
+			// so a refetch just makes every edge re-download them (the thumbnail
+			// storm) for nothing — evicting is enough; the next real request re-warms.
+			// Only HTML/dynamic URLs are refetched, and only if the setting is on.
+			// Both sets are capped so a bulk media import can't fire an unbounded payload.
+			$refetch_all = (bool) TE_Settings::get( 'refetch_enabled' );
+			$max         = (int) apply_filters( 'flavor_edge_max_purge_urls', 200 );
 
-			do_action( 'flavor_edge_after_url_purge', $result, $urls );
+			$static  = array();
+			$dynamic = array();
+			foreach ( $urls as $u ) {
+				if ( self::is_static_asset_url( $u ) ) {
+					$static[] = $u;
+				} else {
+					$dynamic[] = $u;
+				}
+			}
+
+			if ( ! empty( $static ) ) {
+				$static = array_slice( array_values( $static ), 0, $max );
+				$result = TE_Api::purge_urls( $static, true, false, true ); // evict only, never refetch.
+				do_action( 'flavor_edge_after_url_purge', $result, $static );
+			}
+			if ( ! empty( $dynamic ) ) {
+				$dynamic = array_slice( array_values( $dynamic ), 0, $max );
+				$result  = TE_Api::purge_urls( $dynamic, true, $refetch_all, true );
+				do_action( 'flavor_edge_after_url_purge', $result, $dynamic );
+			}
 		}
 
 		// Reset queues.
@@ -576,7 +654,7 @@ class TE_Invalidation {
 		// when the admin pinned the HTTP method or the API is currently down.
 		$method = TE_Settings::get( 'warmup_method' );
 		if ( 'http' !== $method && ! TE_Api::is_circuit_open() ) {
-			$result = TE_Api::purge_urls( $urls, true, true );
+			$result = TE_Api::purge_urls( $urls, true, true, true );
 			if ( ! empty( $result['success'] ) ) {
 				return;
 			}

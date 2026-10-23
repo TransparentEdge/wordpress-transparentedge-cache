@@ -40,6 +40,11 @@ class TE_Preload {
 		add_action( 'flavor_edge_after_purge_all', array( __CLASS__, 'on_purge_all' ) );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_health_route' ) );
 		add_action( 'wp_ajax_flavor_edge_preload_tick', array( __CLASS__, 'ajax_tick' ) );
+		// Watchdog: the warm is cron-driven (admin-ajax is only an accelerator), but
+		// if the process holding a batch lock crashes before rescheduling, a running
+		// warm can be left with no pending event. Piggyback on the 30-min health-check
+		// cron — which runs regardless of admin-ajax — to re-kick such an orphan.
+		add_action( 'flavor_edge_health_check', array( __CLASS__, 'watchdog' ) );
 	}
 
 	/**
@@ -49,6 +54,13 @@ class TE_Preload {
 	 */
 	public static function on_purge_all( $result ) {
 		if ( ! TE_Settings::get( 'preload_sitemap' ) ) {
+			return;
+		}
+		// R4: don't restart a preload that is already running — a burst of full
+		// purges (several publishes in a row) would otherwise reset the queue and
+		// re-probe the origin on each one.
+		$current = self::get_status();
+		if ( is_array( $current ) && isset( $current['status'] ) && 'running' === $current['status'] ) {
 			return;
 		}
 		if ( isset( $result['success'] ) && $result['success'] ) {
@@ -214,6 +226,43 @@ class TE_Preload {
 		if ( 'running' === $status['status'] && ! empty( $status['remaining'] ) ) {
 			wp_schedule_single_event( time() + self::next_delay( $status ) + 1, 'flavor_edge_preload_batch' );
 		}
+	}
+
+	/**
+	 * Watchdog: rescue a warm that is 'running' with work left but no pending
+	 * batch event — the signature of a process that crashed mid-batch before
+	 * rescheduling. Runs on the 30-min health-check cron, so it never depends on
+	 * admin-ajax. Strictly idempotent and conservative: it only re-kicks when a
+	 * batch is demonstrably NOT in flight (no scheduled event, lock expired, and
+	 * enough time has passed since the last batch that a crash is the only
+	 * explanation), so it can never double-process alongside a live batch.
+	 */
+	public static function watchdog() {
+		$status = get_option( self::STATUS_KEY, null );
+		if ( ! is_array( $status ) || 'running' !== ( $status['status'] ?? '' ) || empty( $status['remaining'] ) ) {
+			return; // Nothing to rescue.
+		}
+
+		// A batch is already queued — the chain is alive, leave it.
+		if ( wp_next_scheduled( 'flavor_edge_preload_batch' ) ) {
+			return;
+		}
+
+		// A batch could still be running right now. Only treat the warm as orphaned
+		// once the lock must have expired with no reschedule: require both an idle
+		// window past LOCK_TTL since the last activity AND no live lock.
+		$ref = max( (int) ( $status['last_batch'] ?? 0 ), (int) ( $status['started'] ?? 0 ) );
+		if ( ( time() - $ref ) < ( self::LOCK_TTL + 5 ) ) {
+			return; // Too soon — a batch may still be in flight.
+		}
+		if ( self::is_locked() ) {
+			return; // A batch holds the lock now — not orphaned.
+		}
+
+		// Orphaned running warm with no scheduled event → re-kick a single batch.
+		// cron_process_batch re-arms the chain from here, and the existing
+		// no_progress/STALL_LIMIT guard still bounds a warm that genuinely stalls.
+		wp_schedule_single_event( time() + 1, 'flavor_edge_preload_batch' );
 	}
 
 	/**
@@ -419,6 +468,18 @@ class TE_Preload {
 	}
 
 	/**
+	 * Read-only check: is a fresh batch lock currently held? Used by the watchdog
+	 * to avoid re-kicking a warm whose batch is legitimately still in flight.
+	 *
+	 * @return bool True when a non-expired lock is held right now.
+	 */
+	private static function is_locked() {
+		$ttl  = (int) apply_filters( 'flavor_edge_preload_lock_ttl', self::LOCK_TTL );
+		$lock = get_option( self::LOCK_KEY, null );
+		return ( is_array( $lock ) && isset( $lock['t'] ) && ( time() - (int) $lock['t'] ) < $ttl );
+	}
+
+	/**
 	 * Delay before the next batch, honouring backoff and gate waits.
 	 *
 	 * @param array $status Current status.
@@ -513,6 +574,16 @@ class TE_Preload {
 	 * @return array { ok: bool, latency: float } Health verdict and probe latency.
 	 */
 	private static function probe_origin() {
+		// R4: cache the probe briefly so a tight batch cadence doesn't re-probe the
+		// origin on every batch (the health gate must not itself become origin load).
+		$cache_ttl = (int) apply_filters( 'flavor_edge_preload_health_cache', 10 );
+		if ( $cache_ttl > 0 ) {
+			$cached = get_transient( 'flavor_edge_preload_health' );
+			if ( is_array( $cached ) && isset( $cached['ok'], $cached['latency'] ) ) {
+				return $cached;
+			}
+		}
+
 		// Probe the cheap health endpoint, NOT the home page: on a news/e-commerce
 		// origin the home regenerates many widgets (very expensive), so sensing it
 		// on every batch would hammer the exact origin the warm-up protects.
@@ -536,15 +607,19 @@ class TE_Preload {
 		) );
 
 		if ( is_wp_error( $resp ) ) {
-			return array( 'ok' => false, 'latency' => (float) $timeout );
+			$verdict = array( 'ok' => false, 'latency' => (float) $timeout );
+		} else {
+			$elapsed     = microtime( true ) - $start;
+			$code        = (int) wp_remote_retrieve_response_code( $resp );
+			$max_latency = (float) apply_filters( 'flavor_edge_preload_health_max_latency', 2.5 );
+			$ok          = ! ( 0 === $code || $code >= 500 || $elapsed > $max_latency );
+			$verdict     = array( 'ok' => $ok, 'latency' => $elapsed );
 		}
 
-		$elapsed     = microtime( true ) - $start;
-		$code        = (int) wp_remote_retrieve_response_code( $resp );
-		$max_latency = (float) apply_filters( 'flavor_edge_preload_health_max_latency', 2.5 );
-		$ok          = ! ( 0 === $code || $code >= 500 || $elapsed > $max_latency );
-
-		return array( 'ok' => $ok, 'latency' => $elapsed );
+		if ( $cache_ttl > 0 ) {
+			set_transient( 'flavor_edge_preload_health', $verdict, $cache_ttl );
+		}
+		return $verdict;
 	}
 
 	/**

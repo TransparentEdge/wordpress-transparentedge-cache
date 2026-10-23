@@ -32,14 +32,23 @@ class TE_PageCache {
 	// -------------------------------------------------------------------------
 
 	public static function init() {
+		// R3: background GC for page-cache stores that a flush moved aside (.trash-*).
+		// Registered unconditionally so the sweep still runs even if the page cache
+		// is later disabled while trash is pending.
+		add_action( 'flavor_edge_pc_trash_gc', array( 'flavor_edge\\TE_PageCache_Store', 'gc_trash' ), 10, 1 );
+
 		if ( is_admin() ) {
 			add_action( 'wp_ajax_flavor_edge_enable_page_cache', array( __CLASS__, 'ajax_enable' ) );
 			add_action( 'wp_ajax_flavor_edge_disable_page_cache', array( __CLASS__, 'ajax_disable' ) );
 			add_action( 'wp_ajax_flavor_edge_flush_page_cache', array( __CLASS__, 'ajax_flush' ) );
 
-			// Keep the drop-in config in sync with the saved settings.
+			// Keep the drop-in config in sync with the saved settings. admin_init fires
+			// on EVERY admin request (every page load AND every admin-ajax call), so
+			// this must not rewrite the file each time: maybe_write_config_file writes
+			// only when the file is missing or its contents would differ. The real
+			// settings-save path (update_option_ below) still writes unconditionally.
 			if ( self::is_enabled() ) {
-				add_action( 'admin_init', array( __CLASS__, 'write_config_file' ) );
+				add_action( 'admin_init', array( __CLASS__, 'maybe_write_config_file' ) );
 			}
 		}
 
@@ -48,7 +57,16 @@ class TE_PageCache {
 		}
 
 		// STORE: start buffering as early as the main query is resolved.
-		add_action( 'template_redirect', array( __CLASS__, 'maybe_buffer' ), 0 );
+		// R2: this buffer must be the OUTER one so capture() stores the HTML AFTER
+		// the front-end optimizer (lazyload / minify / defer, registered by
+		// TE_Frontend on template_redirect at priority 0) has run. A lower priority
+		// (-10) makes our ob_start fire FIRST → our buffer is the outermost → at
+		// request end the inner optimizer buffer flushes first and hands us the
+		// already-optimized HTML. Otherwise the shield stores UNoptimized HTML and
+		// process_html is recomputed on every miss instead of being amortized.
+		// NOTE: structural change — must be validated on staging (compare HIT vs
+		// MISS byte-for-byte with the WPO features on) before trusting in production.
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_buffer' ), -10 );
 
 		// Keep the drop-in config in sync even on WP-CLI / programmatic saves.
 		add_action( 'update_option_' . TE_Settings::OPTION_KEY, array( __CLASS__, 'write_config_file' ) );
@@ -218,9 +236,12 @@ class TE_PageCache {
 	 * Write the config.php the drop-in includes. Regenerated whenever settings
 	 * change so the pre-WordPress serve path always matches the panel.
 	 */
-	public static function write_config_file() {
-		self::ensure_dirs();
-
+	/**
+	 * Build the page-cache config file contents (pure; no side effects).
+	 *
+	 * @return string PHP source for the generated config file.
+	 */
+	private static function build_config_code() {
 		$config = array(
 			'enabled' => self::is_enabled(),
 			'engine'  => self::engine_file(),
@@ -228,15 +249,45 @@ class TE_PageCache {
 			'rules'   => self::rules_config(),
 		);
 
-		$code = "<?php\n// Flavor Edge Cache — page cache config. Generated file, do not edit.\n"
+		return "<?php\n// Flavor Edge Cache — page cache config. Generated file, do not edit.\n"
 			. "defined( 'ABSPATH' ) || exit;\n"
 			. 'return ' . var_export( $config, true ) . ";\n";
+	}
+
+	public static function write_config_file() {
+		self::ensure_dirs();
+
+		$code = self::build_config_code();
 
 		// Atomic write: the serve drop-in `include`s this config PRE-BOOT on every
-		// cacheable request, and it is rewritten on every admin_init / settings save,
-		// so an in-place write could be read half-formed under load → parse error in
-		// a pre-boot include → white screen. Same guarantee as the other drop-ins.
+		// cacheable request, and it is rewritten on every settings save, so an
+		// in-place write could be read half-formed under load → parse error in a
+		// pre-boot include → white screen. Same guarantee as the other drop-ins.
 		return TE_ObjectCache::write_atomic( self::config_file(), $code );
+	}
+
+	/**
+	 * Self-healing variant for the admin_init hook: write only when the config
+	 * file is missing or its contents would differ. admin_init fires on every
+	 * admin request (page loads and every admin-ajax call alike), so an
+	 * unconditional write here would hammer the disk with an atomic temp-write +
+	 * rename on a file that changes only when settings change. Reading the file
+	 * and comparing is far cheaper than rewriting it, and still self-heals a
+	 * missing or externally-corrupted config.
+	 */
+	public static function maybe_write_config_file() {
+		$code = self::build_config_code();
+		$file = self::config_file();
+
+		if ( is_readable( $file ) ) {
+			$current = @file_get_contents( $file );
+			if ( false !== $current && $current === $code ) {
+				return true; // Already in sync — no write.
+			}
+		}
+
+		self::ensure_dirs();
+		return TE_ObjectCache::write_atomic( $file, $code );
 	}
 
 	private static function ensure_dirs() {

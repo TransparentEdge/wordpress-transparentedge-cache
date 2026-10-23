@@ -35,9 +35,9 @@ class TE_BrowserCache {
 		add_action( 'flavor_edge_settings_saved', array( __CLASS__, 'on_settings_saved' ) );
 
 		// Invalidation hooks: purge assets when media/themes/plugins change.
-		add_action( 'add_attachment', array( __CLASS__, 'on_media_change' ) );
-		add_action( 'edit_attachment', array( __CLASS__, 'on_media_change' ) );
-		add_action( 'delete_attachment', array( __CLASS__, 'on_media_change' ) );
+		add_action( 'add_attachment', array( __CLASS__, 'on_media_add' ) );
+		add_action( 'edit_attachment', array( __CLASS__, 'on_media_edit' ) );
+		add_action( 'delete_attachment', array( __CLASS__, 'on_media_delete' ) );
 		add_action( 'upgrader_process_complete', array( __CLASS__, 'on_asset_change' ), 10, 2 );
 		add_action( 'switch_theme', array( __CLASS__, 'on_asset_change' ) );
 
@@ -252,18 +252,102 @@ class TE_BrowserCache {
 	// Invalidation hooks for static assets.
 	// -------------------------------------------------------------------------
 
+	/** Postmeta key holding the tracked file signature (mtime:size). */
+	const MEDIA_SIG_META = '_fe_file_sig';
+
 	/**
-	 * Handle media upload/edit/delete.
+	 * Media UPLOAD: a fresh upload has a brand-new URL that was never cached, so
+	 * there is nothing to invalidate. Just record the file's signature so a later
+	 * same-URL replacement can be detected and purged surgically.
 	 *
 	 * @param int $attachment_id Attachment ID.
 	 */
-	public static function on_media_change( $attachment_id ) {
+	public static function on_media_add( $attachment_id ) {
+		self::update_media_signature( $attachment_id );
+	}
+
+	/**
+	 * Media EDIT: honour the rule — invalidate ONLY when the file's bytes actually
+	 * changed (a real same-URL replacement or thumbnail regeneration), NEVER on a
+	 * metadata-only edit (alt text, caption, title). Core image edits create NEW
+	 * files (new URLs), so the old cached URLs are untouched; a same-URL replacement
+	 * changes the file's mtime/size, which we detect against the stored signature.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 */
+	public static function on_media_edit( $attachment_id ) {
+		$prev = get_post_meta( $attachment_id, self::MEDIA_SIG_META, true );
+		$now  = self::media_signature( $attachment_id );
+
+		if ( '' !== $now ) {
+			self::update_media_signature( $attachment_id, $now );
+		}
+
+		// No baseline yet (image predates this tracking): we cannot confirm the
+		// bytes changed, so — invalidating only what changed — we set the baseline
+		// and do NOT purge. The next real change is caught.
+		if ( '' === $prev ) {
+			return;
+		}
+
+		// Baseline exists: purge ONLY if the bytes actually changed.
+		if ( $now !== $prev ) {
+			self::queue_media_urls( $attachment_id );
+		}
+	}
+
+	/**
+	 * Media DELETE: the files are gone, so purge the URL and its thumbnails (they
+	 * were cached and would now 404).
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 */
+	public static function on_media_delete( $attachment_id ) {
+		self::queue_media_urls( $attachment_id );
+	}
+
+	/**
+	 * Signature of an attachment's main file (mtime:size) — changes iff the bytes
+	 * on disk change. Empty string when the file cannot be read.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return string
+	 */
+	private static function media_signature( $attachment_id ) {
+		$file = get_attached_file( $attachment_id );
+		if ( ! $file || ! @file_exists( $file ) ) {
+			return '';
+		}
+		return (string) @filemtime( $file ) . ':' . (string) @filesize( $file );
+	}
+
+	/**
+	 * Store the current file signature for an attachment.
+	 *
+	 * @param int         $attachment_id Attachment ID.
+	 * @param string|null $sig           Precomputed signature, or null to compute.
+	 */
+	private static function update_media_signature( $attachment_id, $sig = null ) {
+		if ( null === $sig ) {
+			$sig = self::media_signature( $attachment_id );
+		}
+		if ( '' !== $sig ) {
+			update_post_meta( $attachment_id, self::MEDIA_SIG_META, $sig );
+		}
+	}
+
+	/**
+	 * Queue the attachment's own URL plus every registered thumbnail size for
+	 * eviction (soft, evict-only — static bytes are never refetched; see R7).
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 */
+	private static function queue_media_urls( $attachment_id ) {
 		$url = wp_get_attachment_url( $attachment_id );
 		if ( $url ) {
 			TE_Invalidation::queue_urls( array( $url ) );
 		}
 
-		// Also invalidate thumbnails.
 		$metadata = wp_get_attachment_metadata( $attachment_id );
 		if ( ! empty( $metadata['sizes'] ) ) {
 			$upload_dir = wp_get_upload_dir();

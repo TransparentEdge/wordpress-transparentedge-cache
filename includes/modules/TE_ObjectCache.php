@@ -130,6 +130,27 @@ class TE_ObjectCache {
 	 *
 	 * @return array { redis: bool, memcached: bool, apcu: bool, recommended: string|false }
 	 */
+	/**
+	 * TLS connection settings for Redis, shared by backend detection and the
+	 * page-cache store. Enabled by WP_REDIS_SCHEME = 'tls'|'rediss' or
+	 * WP_REDIS_TLS = true. Verifies the peer certificate by default (secure by
+	 * default, as modern Redis clients do); override via WP_REDIS_TLS_OPTIONS
+	 * (array) for an internal CA or a self-signed cert, e.g.
+	 *   define( 'WP_REDIS_TLS_OPTIONS', array( 'cafile' => '/path/ca.pem' ) );
+	 *   define( 'WP_REDIS_TLS_OPTIONS', array( 'verify_peer' => false ) ); // self-signed
+	 *
+	 * @return array { bool enabled, array stream }  stream = SSL stream-context options.
+	 */
+	public static function redis_tls() {
+		$scheme  = defined( 'WP_REDIS_SCHEME' ) ? strtolower( (string) WP_REDIS_SCHEME ) : '';
+		$enabled = ( 'tls' === $scheme || 'rediss' === $scheme || ( defined( 'WP_REDIS_TLS' ) && WP_REDIS_TLS ) );
+		$ssl     = array( 'verify_peer' => true, 'verify_peer_name' => true );
+		if ( defined( 'WP_REDIS_TLS_OPTIONS' ) && is_array( WP_REDIS_TLS_OPTIONS ) ) {
+			$ssl = array_merge( $ssl, WP_REDIS_TLS_OPTIONS );
+		}
+		return array( 'enabled' => (bool) $enabled, 'stream' => $ssl );
+	}
+
 	public static function detect_backends( $force = false ) {
 		// Per-request memo: admin_notices, get_stats and the dashboard card each call
 		// this on a single admin load, and each call opens real Redis/Memcached
@@ -158,14 +179,21 @@ class TE_ObjectCache {
 			$host = defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1';
 			$port = defined( 'WP_REDIS_PORT' ) ? WP_REDIS_PORT : 6379;
 			$pass = defined( 'WP_REDIS_PASSWORD' ) ? WP_REDIS_PASSWORD : '';
-			$result['redis_info'] = $host . ':' . $port;
+			$tls  = self::redis_tls();
+			$result['redis_info'] = $host . ':' . $port . ( $tls['enabled'] ? ' (TLS)' : '' );
 
 			// The extension alone proves nothing: a box can ship phpredis with no
 			// Redis daemon running. Only a live round-trip (connect + PING) marks it
 			// available, or we would green-light a backend that caches nothing.
 			try {
 				$redis = new \Redis();
-				if ( @$redis->connect( $host, (int) $port, 1 ) ) {
+				// TLS: prefix host with tls:// and pass an SSL stream context (7th arg,
+				// phpredis >= 5.3). On older phpredis this throws / fails and surfaces
+				// below as a connection error rather than a silent plaintext fallback.
+				$connected = $tls['enabled']
+					? @$redis->connect( 'tls://' . $host, (int) $port, 1.0, null, 0, 0, array( 'stream' => $tls['stream'] ) )
+					: @$redis->connect( $host, (int) $port, 1 );
+				if ( $connected ) {
 					// The daemon answered. AUTH (if a password is configured) and PING
 					// can still fail on a password-protected server — the common case
 					// in production. phpredis throws on those, so catch them here and
@@ -713,6 +741,8 @@ class TE_ObjectCache {
  *   WP_REDIS_PASSWORD (default: null)
  *   WP_REDIS_DATABASE (default: 0)
  *   WP_REDIS_PREFIX   (default: site blog_id)
+ *   WP_REDIS_SCHEME   ('tls' or 'rediss' to enable TLS; or WP_REDIS_TLS = true)
+ *   WP_REDIS_TLS_OPTIONS (array; SSL stream-context opts, e.g. cafile / verify_peer)
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -769,6 +799,33 @@ function wp_cache_close() {
 	global $wp_object_cache;
 	return $wp_object_cache->close();
 }
+function wp_cache_get_multiple( $keys, $group = 'default', $force = false ) {
+	global $wp_object_cache;
+	return $wp_object_cache->get_multiple( $keys, $group, $force );
+}
+function wp_cache_set_multiple( $data, $group = 'default', $expire = 0 ) {
+	global $wp_object_cache;
+	return $wp_object_cache->set_multiple( $data, $group, $expire );
+}
+function wp_cache_delete_multiple( $keys, $group = 'default' ) {
+	global $wp_object_cache;
+	return $wp_object_cache->delete_multiple( $keys, $group );
+}
+function wp_cache_add_multiple( array $data, $group = 'default', $expire = 0 ) {
+	global $wp_object_cache;
+	$r = array();
+	foreach ( $data as $key => $value ) {
+		$r[ $key ] = $wp_object_cache->add( $key, $value, $group, $expire );
+	}
+	return $r;
+}
+function wp_cache_flush_runtime() {
+	global $wp_object_cache;
+	return method_exists( $wp_object_cache, 'flush_runtime' ) ? $wp_object_cache->flush_runtime() : false;
+}
+function wp_cache_supports( $feature ) {
+	return in_array( $feature, array( 'get_multiple', 'set_multiple', 'delete_multiple', 'add_multiple', 'flush_runtime' ), true );
+}
 
 class WP_Object_Cache_Redis {
 	private $redis;
@@ -794,7 +851,19 @@ class WP_Object_Cache_Redis {
 			$this->redis = new Redis();
 			$host = defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1';
 			$port = defined( 'WP_REDIS_PORT' ) ? WP_REDIS_PORT : 6379;
-			$this->redis->connect( $host, (int) $port, 1 );
+			$scheme = defined( 'WP_REDIS_SCHEME' ) ? strtolower( (string) WP_REDIS_SCHEME ) : '';
+			$tls = ( 'tls' === $scheme || 'rediss' === $scheme || ( defined( 'WP_REDIS_TLS' ) && WP_REDIS_TLS ) );
+			// R6: persistent connection reused per PHP-FPM worker (pconnect).
+			$pid = 'fe_' . substr( md5( $host . ':' . $port . ':' . ( defined( 'WP_REDIS_DATABASE' ) ? WP_REDIS_DATABASE : 0 ) ), 0, 12 );
+			if ( $tls ) {
+				$ssl = array( 'verify_peer' => true, 'verify_peer_name' => true );
+				if ( defined( 'WP_REDIS_TLS_OPTIONS' ) && is_array( WP_REDIS_TLS_OPTIONS ) ) {
+					$ssl = array_merge( $ssl, WP_REDIS_TLS_OPTIONS );
+				}
+				$this->redis->pconnect( 'tls://' . $host, (int) $port, 1.0, $pid, 0, 0, array( 'stream' => $ssl ) );
+			} else {
+				$this->redis->pconnect( $host, (int) $port, 1.0, $pid );
+			}
 			if ( defined( 'WP_REDIS_PASSWORD' ) && WP_REDIS_PASSWORD ) {
 				$this->redis->auth( WP_REDIS_PASSWORD );
 			}
@@ -868,6 +937,69 @@ class WP_Object_Cache_Redis {
 		if ( $this->redis && ! in_array( $group, $this->non_persistent, true ) ) {
 			$this->redis->del( $k );
 		}
+		return true;
+	}
+
+	public function get_multiple( $keys, $group = 'default', $force = false ) {
+		$results = array();
+		$need    = array(); // redis-key => original key, for the ones we must fetch.
+		foreach ( (array) $keys as $key ) {
+			$k = $this->key( $key, $group );
+			if ( ! $force && isset( $this->cache[ $k ] ) ) {
+				$results[ $key ] = $this->cache[ $k ];
+				$this->cache_hits++;
+			} elseif ( in_array( $group, $this->non_persistent, true ) || ! $this->redis ) {
+				$results[ $key ] = false;
+				$this->cache_misses++;
+			} else {
+				$need[ $k ] = $key;
+			}
+		}
+		if ( ! empty( $need ) ) {
+			// ONE round-trip (MGET) for every key not already in the runtime cache,
+			// instead of one GET per key via the core wp_cache_get_multiple() loop.
+			$vals = $this->redis->mget( array_keys( $need ) ); // positional, false for missing.
+			$i = 0;
+			foreach ( $need as $k => $orig ) {
+				$v = ( is_array( $vals ) && array_key_exists( $i, $vals ) ) ? $vals[ $i ] : false;
+				$i++;
+				if ( false === $v ) {
+					$results[ $orig ] = false;
+					$this->cache_misses++;
+				} else {
+					$v = maybe_unserialize( $v );
+					$this->cache[ $k ]  = $v;
+					$results[ $orig ]   = $v;
+					$this->cache_hits++;
+				}
+			}
+		}
+		// Return in the requested order.
+		$ordered = array();
+		foreach ( (array) $keys as $key ) {
+			$ordered[ $key ] = array_key_exists( $key, $results ) ? $results[ $key ] : false;
+		}
+		return $ordered;
+	}
+
+	public function set_multiple( $data, $group = 'default', $expire = 0 ) {
+		$r = array();
+		foreach ( (array) $data as $key => $value ) {
+			$r[ $key ] = $this->set( $key, $value, $group, $expire );
+		}
+		return $r;
+	}
+
+	public function delete_multiple( $keys, $group = 'default' ) {
+		$r = array();
+		foreach ( (array) $keys as $key ) {
+			$r[ $key ] = $this->delete( $key, $group );
+		}
+		return $r;
+	}
+
+	public function flush_runtime() {
+		$this->cache = array();
 		return true;
 	}
 

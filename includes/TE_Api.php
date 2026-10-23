@@ -204,7 +204,7 @@ class TE_Api {
 	 * @param bool   $refetch Warm-up cache after purge.
 	 * @return array { success: bool, message: string, urls_sent: int }
 	 */
-	public static function purge_urls( $urls, $soft = true, $refetch = false ) {
+	public static function purge_urls( $urls, $soft = true, $refetch = false, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
 			return array( 'success' => false, 'message' => 'No valid API token', 'urls_sent' => 0 );
@@ -235,7 +235,7 @@ class TE_Api {
 			$payload['refetch'] = true;
 		}
 
-		$response = self::api_post( $endpoint, $payload );
+		$response = self::api_post( $endpoint, $payload, $async );
 
 		if ( is_wp_error( $response ) ) {
 			self::record_failure( 'purge_urls: ' . $response->get_error_message() );
@@ -357,7 +357,7 @@ class TE_Api {
 	 * @param bool  $soft Use soft purge.
 	 * @return array { success: bool, message: string }
 	 */
-	public static function purge_tags( $tags, $soft = true ) {
+	public static function purge_tags( $tags, $soft = true, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
 			return array( 'success' => false, 'message' => 'No valid API token' );
@@ -381,7 +381,7 @@ class TE_Api {
 			$payload['soft'] = true;
 		}
 
-		$response = self::api_post( $endpoint, $payload );
+		$response = self::api_post( $endpoint, $payload, $async );
 
 		if ( is_wp_error( $response ) ) {
 			self::record_failure( 'purge_tags: ' . $response->get_error_message() );
@@ -451,14 +451,14 @@ class TE_Api {
 	 * @param bool $force_ban Force a hard BAN (dangerous in high-traffic — use only in emergencies).
 	 * @return array
 	 */
-	public static function purge_all( $force_ban = false ) {
+	public static function purge_all( $force_ban = false, $async = false ) {
 		if ( $force_ban ) {
 			return self::ban( home_url( '/' ) );
 		}
 
 		// Soft purge via site-wide tag — safe for high-traffic.
 		$site_tag = 'site-' . get_current_blog_id();
-		return self::purge_tags( array( $site_tag, 'front-page', 'feed' ), true );
+		return self::purge_tags( array( $site_tag, 'front-page', 'feed' ), true, $async );
 	}
 
 	// -------------------------------------------------------------------------
@@ -472,14 +472,20 @@ class TE_Api {
 	 * @param array  $payload  Data to send as JSON.
 	 * @return array|\WP_Error
 	 */
-	private static function api_post( $endpoint, $payload ) {
+	private static function api_post( $endpoint, $payload, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
 			return new \WP_Error( 'no_token', 'Could not obtain API token' );
 		}
 
+		// Async (fire-at-shutdown) calls use a short timeout so an editorial save
+		// never holds a PHP-FPM worker for the full HTTPS round-trip: a purge not
+		// acknowledged in a few seconds is given up on (the circuit breaker and the
+		// health-check cron still catch real API outages).
+		$async_timeout = (int) apply_filters( 'flavor_edge_async_api_timeout', 4 );
+
 		return wp_remote_post( $endpoint, array(
-			'timeout' => 10,
+			'timeout' => $async ? $async_timeout : 10,
 			'headers' => array(
 				'Authorization' => 'Bearer ' . $token,
 				'Content-Type'  => 'application/json',

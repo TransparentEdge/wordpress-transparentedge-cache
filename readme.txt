@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.9.1
+Stable tag: 1.11.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -70,6 +70,20 @@ If your Redis has `requirepass` set, the daemon is up but the plugin cannot use 
 
 The object cache reuses these standard `WP_REDIS_*` constants. After adding them, restart php-fpm and reload the TE Cache panel; the Object cache card should turn green with a hit ratio.
 
+**Redis over TLS (encrypted in transit):**
+
+For a managed or remote Redis that requires TLS (e.g. AWS ElastiCache with in-transit encryption), enable it with either constant:
+
+    define( 'WP_REDIS_SCHEME', 'tls' );   // or 'rediss'
+    // alternatively: define( 'WP_REDIS_TLS', true );
+
+The server certificate is **verified by default**. For an internal CA or a self-signed certificate, pass SSL stream-context options:
+
+    define( 'WP_REDIS_TLS_OPTIONS', array( 'cafile' => '/etc/ssl/redis-ca.pem' ) );
+    // self-signed (not recommended): define( 'WP_REDIS_TLS_OPTIONS', array( 'verify_peer' => false ) );
+
+TLS requires `phpredis >= 5.3` in php-fpm. Plaintext connections are unchanged. The isolated page-cache connection honours the same settings, or its own `FLAVOR_EDGE_PC_REDIS_TLS` / `FLAVOR_EDGE_PC_REDIS_TLS_OPTIONS`.
+
 **Isolating the page cache from a shared instance (optional):**
 
 If the origin page cache uses Redis/Memcached on an instance shared with other sites, you can give it its own, isolated connection so a foreign `flush_all` / `flushDb` can never reach it:
@@ -84,7 +98,36 @@ Each falls back to the matching `WP_*` constant when unset, so default behaviour
 
 **If the backend goes down:** the panel shows the object cache as *"Not persistent"* in red (recomputing against the database every request) rather than pretending it is healthy. Start the service, or disable the object cache, to clear it.
 
+== WP-CLI ==
+
+The plugin registers a `wp te-cache` command for operations and deploy pipelines:
+
+    wp te-cache purge --all                 # soft site-wide purge (add --ban for a hard recursive ban)
+    wp te-cache purge --url=<url[,url]>      # purge one or more URLs (add --refetch to re-warm)
+    wp te-cache purge --tag=<key[,key]>      # purge by Surrogate-Key tag
+    wp te-cache warm                         # queue a background preload
+    wp te-cache warm --block                 # run the preload to completion (CI/deploy)
+    wp te-cache warm --status                # inspect a preload in progress
+    wp te-cache status                       # API / object cache / page cache health
+    wp te-cache config                       # effective configuration (credentials redacted)
+
+Soft purge is the default; add `--hard` to force an immediate purge. The commands are thin wrappers over the same hardened purge/preload APIs the plugin uses internally.
+
 == Changelog ==
+
+= 1.11.0 =
+Performance and reliability improvements across invalidation, the object cache and the origin page cache. Invalidation remains key-based and surgical: only what actually changed is purged.
+* Object cache (Redis): the drop-in keeps a persistent connection per PHP-FPM worker and serves multi-key reads in a single round-trip (MGET / wp_cache_get_multiple), reducing calls on the logged-in and admin path.
+* Media: an image is purged only when its file actually changes (size/mtime signature) — editing an attachment's title, alt text or caption no longer purges it. Thumbnails are evicted without a refetch, and bulk URL purges are capped (filter: flavor_edge_max_purge_urls).
+* Publishing: invalidation is dispatched with a short, non-blocking timeout so saving a post returns promptly. New filter flavor_edge_full_purge_on_plugin_change scopes or disables the full purge that runs when a plugin is activated or deactivated.
+* Page cache: a full flush is now an O(1) directory rename plus a scheduled cleanup instead of a synchronous recursive delete; the generated config file is rewritten only when its contents change; stored pages keep the already-optimized HTML so the optimizer runs once per miss.
+* Warm-up: fully cron-driven, with a watchdog that resumes a run interrupted mid-way; the origin-health probe is briefly cached so repeated purges don't re-probe on each one.
+* Autoload: a static class map replaces per-class filesystem lookups on every request (directory scan kept as a fallback); Speculation Rules are built once per request.
+
+= 1.10.0 =
+Two new capabilities on top of the stable 1.9.1 base. No changes to existing behaviour.
+* NEW (WP-CLI): `wp te-cache purge|warm|status|config` for operations and deploy pipelines — soft/hard/tag/URL purge, background or blocking (`--block`) warm-up, and a health/config read-out (credentials are never printed). Thin wrappers over the already-hardened purge/preload APIs. See the new WP-CLI section.
+* NEW (Redis over TLS): the object cache and the origin page cache can now connect to Redis over TLS (`rediss`) with certificate verification ON by default — for managed/remote Redis with in-transit encryption (e.g. ElastiCache). Enable with `WP_REDIS_SCHEME='tls'` (or `WP_REDIS_TLS=true`); adjust verification via `WP_REDIS_TLS_OPTIONS` for an internal CA or a self-signed cert. Requires phpredis >= 5.3 in php-fpm. Plaintext connections are unchanged; the drop-in regenerates on upgrade so the new code reaches existing installs. See the Object cache section.
 
 = 1.9.1 =
 Hardening pass after a full code audit, before deploying to a high-traffic site. No new features; correctness, safety and robustness only.

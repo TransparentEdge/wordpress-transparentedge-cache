@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.9.1
+ * Version:           1.11.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.9.1' );
+define( 'FLAVOR_EDGE_VERSION', '1.11.0' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -43,7 +43,54 @@ spl_autoload_register( function ( $class ) {
 	$relative = substr( $class, $len );
 	$relative = str_replace( '\\', '/', $relative );
 
-	// Map class names to file paths.
+	// Static class map: one array lookup + one require per class, instead of up
+	// to six file_exists() stat() calls on EVERY request (front-end included,
+	// when the page/object cache drop-in boots the plugin). The directory-scan
+	// loop below stays as a fallback so a class not yet in the map still loads.
+	static $map = array(
+		'TE_Api'                   => 'TE_Api.php',
+		'TE_CLI'                   => 'TE_CLI.php',
+		'TE_Core'                  => 'TE_Core.php',
+		'TE_Settings'              => 'TE_Settings.php',
+		'TE_Wizard'                => 'TE_Wizard.php',
+		'TE_BrowserCache'          => 'modules/TE_BrowserCache.php',
+		'TE_Cookie_Guard'          => 'modules/TE_Cookie_Guard.php',
+		'TE_Dashboard'             => 'modules/TE_Dashboard.php',
+		'TE_Dependency_Resolver'   => 'modules/TE_Dependency_Resolver.php',
+		'TE_Editorial'             => 'modules/TE_Editorial.php',
+		'TE_Frontend'              => 'modules/TE_Frontend.php',
+		'TE_GoogleFonts'           => 'modules/TE_GoogleFonts.php',
+		'TE_Headers'               => 'modules/TE_Headers.php',
+		'TE_Heartbeat'             => 'modules/TE_Heartbeat.php',
+		'TE_I3'                    => 'modules/TE_I3.php',
+		'TE_Invalidation'          => 'modules/TE_Invalidation.php',
+		'TE_Minify'                => 'modules/TE_Minify.php',
+		'TE_Multisite'             => 'modules/TE_Multisite.php',
+		'TE_ObjectCache'           => 'modules/TE_ObjectCache.php',
+		'TE_Preload'               => 'modules/TE_Preload.php',
+		'TE_UnusedCSS'             => 'modules/TE_UnusedCSS.php',
+		'TE_WooCommerce'           => 'modules/TE_WooCommerce.php',
+		'TE_Admin'                 => 'admin/TE_Admin.php',
+		'TE_Capabilities'          => 'security/TE_Capabilities.php',
+		'TE_Hardening'             => 'security/TE_Hardening.php',
+		'TE_Security'              => 'security/TE_Security.php',
+		'TE_Security_Headers'      => 'security/TE_Security_Headers.php',
+		'TE_Conflict_Detector'     => 'speculation/TE_Conflict_Detector.php',
+		'TE_Header_Injector'       => 'speculation/TE_Header_Injector.php',
+		'TE_Rules_Cache_Invalidator' => 'speculation/TE_Rules_Cache_Invalidator.php',
+		'TE_Rules_Generator'       => 'speculation/TE_Rules_Generator.php',
+		'TE_Rules_Rest_Controller' => 'speculation/TE_Rules_Rest_Controller.php',
+		'TE_Speculation_Rules'     => 'speculation/TE_Speculation_Rules.php',
+		'TE_VCL_Snippet'           => 'speculation/TE_VCL_Snippet.php',
+		'TE_PageCache'             => 'pagecache/TE_PageCache.php',
+		'TE_PageCache_Store'       => 'pagecache/TE_PageCache_Store.php',
+	);
+	if ( isset( $map[ $relative ] ) ) {
+		require_once FLAVOR_EDGE_DIR . 'includes/' . $map[ $relative ];
+		return;
+	}
+
+	// Fallback: directory scan for any class not present in the static map.
 	$paths = array(
 		FLAVOR_EDGE_DIR . 'includes/' . $relative . '.php',
 		FLAVOR_EDGE_DIR . 'includes/modules/' . $relative . '.php',
@@ -100,6 +147,11 @@ function flavor_edge_init() {
 
 	// Schedule periodic health check.
 	\flavor_edge\TE_Api::schedule_health_check();
+
+	// Register WP-CLI commands (purge / warm / status / config).
+	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		\WP_CLI::add_command( 'te-cache', 'flavor_edge\\TE_CLI' );
+	}
 }
 add_action( 'plugins_loaded', 'flavor_edge_init' );
 

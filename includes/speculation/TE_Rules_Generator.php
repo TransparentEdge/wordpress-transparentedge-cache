@@ -20,11 +20,24 @@ class TE_Rules_Generator {
 	 * @return array Speculation Rules compliant structure.
 	 */
 	public static function generate() {
+		// Per-request memo: the ruleset is site-global (it does not depend on the
+		// current URL or post), so building it more than once in a request is wasted
+		// work — the preset includes, get_post_types() and plugin scan repeat for an
+		// identical result. Memoise for this request only; a cross-request cache is
+		// deliberately avoided because activating a plugin or changing settings must
+		// be reflected on the very next request, and the output already travels inside
+		// the edge/page-cached HTML, so generate() runs only on an origin miss.
+		static $memo = null;
+		if ( null !== $memo ) {
+			return $memo;
+		}
+
 		$settings = TE_Settings::get_all();
 		$mode     = $settings['speculation_mode'] ?? 'balanced';
 
 		if ( 'off' === $mode || empty( $settings['speculation_enabled'] ) ) {
-			return array();
+			$memo = array();
+			return $memo;
 		}
 
 		$rules = array(
@@ -46,7 +59,8 @@ class TE_Rules_Generator {
 		 * @param array  $rules Generated rules.
 		 * @param string $mode  Current mode (conservative|balanced|aggressive).
 		 */
-		return apply_filters( 'flavor_edge_speculation_rules', $rules, $mode );
+		$memo = apply_filters( 'flavor_edge_speculation_rules', $rules, $mode );
+		return $memo;
 	}
 
 	/**

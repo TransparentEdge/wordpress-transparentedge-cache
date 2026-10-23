@@ -326,6 +326,29 @@ class TE_PageCache_Store {
 		if ( '' === $this->dir || ! is_dir( $this->dir ) ) {
 			return true;
 		}
+
+		// R3: do NOT unlink the whole tree synchronously inside the request that
+		// triggered the flush — on a large store that is a storm of unlink() that
+		// blocks the request and hammers a weak origin's disk. Move the store aside
+		// with a single rename (O(1)) to a SIBLING dir on the same filesystem,
+		// recreate the live dir empty immediately (so a concurrent request just
+		// misses and repopulates instead of erroring on a missing dir), and let a
+		// background cron delete the moved tree. Fall back to the in-place walk only
+		// if the rename is not possible (e.g. permissions).
+		$parent = dirname( $this->dir );
+		$trash  = $this->dir . '.trash-' . uniqid();
+
+		if ( is_writable( $parent ) && @rename( $this->dir, $trash ) ) {
+			@mkdir( $this->dir, 0755, true );
+			if ( function_exists( 'wp_schedule_single_event' ) ) {
+				// Duplicate schedules dedupe by hook+args, so a burst of flushes
+				// still results in a single background sweep.
+				wp_schedule_single_event( time() + 10, 'flavor_edge_pc_trash_gc', array( $parent ) );
+			}
+			return true;
+		}
+
+		// Fallback: rename not possible — walk and unlink in place (old behaviour).
 		$it = new \RecursiveIteratorIterator(
 			new \RecursiveDirectoryIterator( $this->dir, \FilesystemIterator::SKIP_DOTS ),
 			\RecursiveIteratorIterator::CHILD_FIRST
@@ -338,6 +361,46 @@ class TE_PageCache_Store {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Background GC (wp-cron): delete store directories that a flush moved aside
+	 * (<store>.trash-*). Runs OFF the request path, so the heavy unlink storm no
+	 * longer blocks the publish that triggered the flush. Bounded per run, and it
+	 * only ever removes our own ".trash-" directories.
+	 *
+	 * @param string $parent Parent directory that holds the .trash-* dirs.
+	 */
+	public static function gc_trash( $parent ) {
+		$parent = (string) $parent;
+		if ( '' === $parent || ! is_dir( $parent ) ) {
+			return;
+		}
+		$trash = glob( $parent . '/*.trash-*', GLOB_ONLYDIR );
+		if ( empty( $trash ) ) {
+			return;
+		}
+		$budget = function_exists( 'apply_filters' )
+			? (int) apply_filters( 'flavor_edge_pc_trash_gc_budget', 20 )
+			: 20;
+		foreach ( array_slice( $trash, 0, $budget ) as $dir ) {
+			// Safety: only ever delete our own moved stores.
+			if ( false === strpos( basename( $dir ), '.trash-' ) ) {
+				continue;
+			}
+			$it = new \RecursiveIteratorIterator(
+				new \RecursiveDirectoryIterator( $dir, \FilesystemIterator::SKIP_DOTS ),
+				\RecursiveIteratorIterator::CHILD_FIRST
+			);
+			foreach ( $it as $item ) {
+				if ( $item->isDir() ) {
+					@rmdir( $item->getPathname() );
+				} else {
+					@unlink( $item->getPathname() );
+				}
+			}
+			@rmdir( $dir );
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -362,7 +425,27 @@ class TE_PageCache_Store {
 			// instance or DB index, out of that blast radius. Falls back to WP_REDIS_*.
 			$host = defined( 'FLAVOR_EDGE_PC_REDIS_HOST' ) ? FLAVOR_EDGE_PC_REDIS_HOST : ( defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1' );
 			$port = defined( 'FLAVOR_EDGE_PC_REDIS_PORT' ) ? (int) FLAVOR_EDGE_PC_REDIS_PORT : ( defined( 'WP_REDIS_PORT' ) ? (int) WP_REDIS_PORT : 6379 );
-			if ( ! @$r->connect( $host, $port, 1 ) ) {
+			// TLS: a dedicated FLAVOR_EDGE_PC_REDIS_TLS wins; otherwise inherit the
+			// global WP_REDIS_SCHEME / WP_REDIS_TLS. Verifies the peer by default;
+			// override via FLAVOR_EDGE_PC_REDIS_TLS_OPTIONS or WP_REDIS_TLS_OPTIONS.
+			if ( defined( 'FLAVOR_EDGE_PC_REDIS_TLS' ) ) {
+				$tls = (bool) FLAVOR_EDGE_PC_REDIS_TLS;
+			} else {
+				$scheme = defined( 'WP_REDIS_SCHEME' ) ? strtolower( (string) WP_REDIS_SCHEME ) : '';
+				$tls    = ( 'tls' === $scheme || 'rediss' === $scheme || ( defined( 'WP_REDIS_TLS' ) && WP_REDIS_TLS ) );
+			}
+			if ( $tls ) {
+				$ssl = array( 'verify_peer' => true, 'verify_peer_name' => true );
+				if ( defined( 'FLAVOR_EDGE_PC_REDIS_TLS_OPTIONS' ) && is_array( FLAVOR_EDGE_PC_REDIS_TLS_OPTIONS ) ) {
+					$ssl = array_merge( $ssl, FLAVOR_EDGE_PC_REDIS_TLS_OPTIONS );
+				} elseif ( defined( 'WP_REDIS_TLS_OPTIONS' ) && is_array( WP_REDIS_TLS_OPTIONS ) ) {
+					$ssl = array_merge( $ssl, WP_REDIS_TLS_OPTIONS );
+				}
+				$ok = @$r->connect( 'tls://' . $host, $port, 1.0, null, 0, 0, array( 'stream' => $ssl ) );
+			} else {
+				$ok = @$r->connect( $host, $port, 1 );
+			}
+			if ( ! $ok ) {
 				return null;
 			}
 			$pass = defined( 'FLAVOR_EDGE_PC_REDIS_PASSWORD' ) ? FLAVOR_EDGE_PC_REDIS_PASSWORD : ( defined( 'WP_REDIS_PASSWORD' ) ? WP_REDIS_PASSWORD : '' );
