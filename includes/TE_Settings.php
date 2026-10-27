@@ -133,6 +133,9 @@ class TE_Settings {
 			'excluded_cookies'      => "wordpress_logged_in_\nwoocommerce_items_in_cart",
 			'debug_mode'            => false,
 			'accepted_query_strings' => "utm_source\nutm_medium\nutm_campaign\nutm_content\nutm_term\nutm_id\nfbclid\ngclid\ngclsrc\nmsclkid\nmc_cid\nmc_eid\n_ga\n_gl\nref",
+			'query_normalize'       => false,    // Opt-in. Serve from cache ignoring UNKNOWN query params (keeps only the allowlist). Closes the "?zz=1 busts the cache" vector. OFF by default: only safe where every content-varying param is in the allowlist (unsafe on faceted / WooCommerce-filter sites).
+			'allowed_query_strings' => '',       // One per line. Extra params (beyond WP core) that DO change the page and must keep their own cache entry. Only used when query_normalize is on.
+			'variant_header'        => '',       // Opt-in. Name of the edge-set request header (e.g. X-Accept-Markdown) that selects an alternate cached representation. Empty = off. REQUIRES the edge to strip any client-supplied copy and set it itself.
 
 			// Heartbeat control.
 			'heartbeat_behavior'       => 'reduce',   // 'default', 'reduce', 'disable_everywhere'.

@@ -979,6 +979,30 @@ defined( 'ABSPATH' ) || exit;
 					</td>
 				</tr>
 
+				<tr>
+					<th><?php esc_html_e( 'Normalize Query Strings', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="query_normalize" value="1" <?php checked( $settings['query_normalize'] ); ?> /> <?php esc_html_e( 'Serve cached pages for unknown query strings (keep only the allowlisted parameters in the cache key)', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'OFF by default. When on, a URL with an unrecognised parameter (e.g. ?ref=x, ?zz=1) is served from cache instead of forcing a full page render — this closes a cache-busting load vector. Only enable it where every parameter that changes the page is in the allowlist below; NOT safe on sites with WooCommerce filters, faceted search or custom query-based content.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="allowed_query_strings"><?php esc_html_e( 'Content Query Strings (allowlist)', 'flavor-edge-cache' ); ?></label></th>
+					<td>
+						<textarea id="allowed_query_strings" name="allowed_query_strings" rows="4" class="large-text code"><?php echo esc_textarea( $settings['allowed_query_strings'] ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'One per line. Only used when “Normalize Query Strings” is on. WordPress core content parameters (p, page_id, paged, cat, tag, author…) are already included — add here any extra parameter that genuinely changes the page and must keep its own cache entry. Search (?s=) is not cached: it bypasses automatically so it never collapses onto the clean URL.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+
+				<tr>
+					<th><label for="variant_header"><?php esc_html_e( 'Content-negotiation Variant Header', 'flavor-edge-cache' ); ?></label></th>
+					<td>
+						<input type="text" id="variant_header" name="variant_header" value="<?php echo esc_attr( $settings['variant_header'] ); ?>" class="regular-text code" placeholder="X-Accept-Markdown" />
+						<p class="description"><?php esc_html_e( 'Optional. Name of an edge-set request header (value "1") that selects an alternate cached representation of the SAME URL - e.g. a Markdown version for AI agents. Leave empty to disable. The stored page is kept under its own key, so it never collides with the HTML one.', 'flavor-edge-cache' ); ?></p>
+						<p class="description"><strong><?php esc_html_e( 'Requirement:', 'flavor-edge-cache' ); ?></strong> <?php esc_html_e( 'the edge MUST unset this header on the incoming request and set it itself from its own content negotiation; otherwise a client could choose its own variant.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+
 				<?php if ( class_exists( 'WooCommerce' ) ) : ?>
 				<tr>
 					<th colspan="2"><h3><?php esc_html_e( 'WooCommerce', 'flavor-edge-cache' ); ?></h3></th>

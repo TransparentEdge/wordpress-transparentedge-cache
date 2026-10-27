@@ -645,6 +645,18 @@ class TE_PageCache_Store {
 			$lang = strtolower( substr( trim( strtok( $server['HTTP_ACCEPT_LANGUAGE'], ',' ) ), 0, 5 ) );
 			$variant .= '|' . preg_replace( '/[^a-z-]/', '', $lang );
 		}
+		// Opt-in content-negotiation variant. When the edge sets the configured
+		// header to "1" (e.g. X-Accept-Markdown, which the edge MUST strip from the
+		// client request first and set itself from its own Accept negotiation), the
+		// representation is stored and served under its own key so it never collides
+		// with the default (HTML) one. Off unless variant_header is configured. The
+		// serve and store paths both call this, so the key matches on both sides.
+		if ( ! empty( $cfg['variant_header'] ) ) {
+			$h = 'HTTP_' . strtr( strtoupper( $cfg['variant_header'] ), '-', '_' );
+			if ( isset( $server[ $h ] ) && '1' === $server[ $h ] ) {
+				$variant .= '|md';
+			}
+		}
 		return $variant;
 	}
 
@@ -657,7 +669,7 @@ class TE_PageCache_Store {
 	 * @param string[] $ignored Query keys to drop before keying.
 	 * @return string
 	 */
-	public static function effective_uri( $uri, array $ignored ) {
+	public static function effective_uri( $uri, array $ignored, $allowed = null ) {
 		$hash = strpos( $uri, '#' );
 		if ( false !== $hash ) {
 			$uri = substr( $uri, 0, $hash );
@@ -668,8 +680,18 @@ class TE_PageCache_Store {
 			return $path;
 		}
 		parse_str( $parts[1], $q );
-		foreach ( $ignored as $k ) {
-			unset( $q[ $k ] );
+		if ( is_array( $allowed ) ) {
+			// Allowlist mode (opt-in): keep ONLY the params that are known to change
+			// the page, drop everything else. A junk/unknown param then normalises to
+			// the clean URL and is served from cache instead of forcing a full render,
+			// which closes the "?zz=1 busts the cache" amplification. Only safe where
+			// every content-varying param is listed — hence opt-in, off by default.
+			$q = array_intersect_key( $q, array_flip( $allowed ) );
+		} else {
+			// Default mode: drop the configured ignored (marketing) params only.
+			foreach ( $ignored as $k ) {
+				unset( $q[ $k ] );
+			}
 		}
 		if ( empty( $q ) ) {
 			return $path;
@@ -734,15 +756,31 @@ class TE_PageCache_Store {
 			}
 		}
 
-		// Residual query string after dropping ignored params → skip (pollution).
+		// Query string handling.
+		// Default mode: a URL that still carries a query string after the ignored
+		// (marketing) params are removed is skipped, to avoid cache pollution.
+		// Allowlist mode (opt-in): effective_uri() drops every unknown param and
+		// keeps only the content-varying ones, so a residual query is normally no
+		// reason to bypass — the request is cacheable under its normalised key.
+		// BUT a dynamic param (search `s`, or one the site configures) must never
+		// collapse onto the clean URL: that would serve — and poison — the clean
+		// page. Those bypass the cache, exactly as search already does by default.
 		$qpos = strpos( $uri, '?' );
 		if ( false !== $qpos ) {
 			parse_str( substr( $uri, $qpos + 1 ), $q );
-			foreach ( (array) ( $cfg['accepted_query_strings'] ?? array() ) as $k ) {
-				unset( $q[ $k ] );
-			}
-			if ( ! empty( $q ) ) {
-				return false;
+			if ( empty( $cfg['query_normalize'] ) ) {
+				foreach ( (array) ( $cfg['accepted_query_strings'] ?? array() ) as $k ) {
+					unset( $q[ $k ] );
+				}
+				if ( ! empty( $q ) ) {
+					return false;
+				}
+			} else {
+				foreach ( (array) ( $cfg['bypass_query_strings'] ?? array() ) as $k ) {
+					if ( isset( $q[ $k ] ) ) {
+						return false;
+					}
+				}
 			}
 		}
 

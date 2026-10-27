@@ -221,9 +221,65 @@ class TE_PageCache {
 			'excluded_urls'          => $lines( 'excluded_urls' ),
 			'excluded_cookies'       => $lines( 'excluded_cookies' ),
 			'accepted_query_strings' => $lines( 'accepted_query_strings' ),
+			'query_normalize'        => ! empty( TE_Settings::get( 'query_normalize' ) ),
+			'allowed_query_strings'  => self::allowed_query_strings( $lines( 'allowed_query_strings' ) ),
+			'bypass_query_strings'   => self::bypass_query_strings(),
+			'variant_header'         => preg_replace( '/[^A-Za-z0-9-]/', '', (string) TE_Settings::get( 'variant_header', '' ) ),
 			'hosts'                  => self::known_hosts(),
 			'vary_language'          => ! empty( TE_Settings::get( 'vary_language' ) ),
 		);
+	}
+
+	/**
+	 * The query-string allowlist for the opt-in normalisation mode: the params that
+	 * are allowed to form their own cache entry. Everything else is dropped from the
+	 * key, so an unknown/junk param (?zz=1) serves the clean page instead of forcing
+	 * a render. Ships with the WordPress core content-varying params; the site adds
+	 * its own (WooCommerce filters, facets, custom pagination) here or via the filter.
+	 *
+	 * @param array $user Params configured by the site.
+	 * @return string[] Unique list of allowed param names.
+	 */
+	private static function allowed_query_strings( array $user ) {
+		// NOTE: the search param `s` is deliberately NOT here. Its value space is
+		// unbounded, so allowlisting it would let ?s=<random> become a cacheable,
+		// STORED entry per term — trading the forced-render vector for a store-fill
+		// one. Nor may it be dropped: that would collapse /?s=term onto the clean
+		// URL and serve the wrong page. It is handled in bypass_query_strings()
+		// instead, which skips the cache for it entirely.
+		$core = array(
+			'p', 'page_id', 'page', 'paged', 'cpage', 'attachment_id',
+			'cat', 'tag', 'author', 'author_name', 'm', 'year', 'monthnum', 'day',
+			'feed', 'orderby', 'order', 'post_type', 'lang',
+		);
+		/**
+		 * Filter the query-string allowlist used by the opt-in normalisation. Add any
+		 * param that genuinely changes the rendered page (or remove one you don't use).
+		 *
+		 * @param string[] $allowed Merged core + site-configured params.
+		 * @param string[] $user    Params configured in the panel.
+		 */
+		$allowed = apply_filters( 'flavor_edge_pc_allowed_query_strings', array_merge( $core, $user ), $user );
+		return array_values( array_unique( array_map( 'strval', (array) $allowed ) ) );
+	}
+
+	/**
+	 * Params that, in normalisation mode, must bypass the page cache rather than
+	 * collapse onto the clean URL. The canonical one is the WordPress search param
+	 * `s`: its value is dynamic content, so serving it from the clean-URL entry (or
+	 * storing a search result under it) would poison the home page. Sites with their
+	 * own dynamic, non-allowlisted params (custom facets, calculators) add them here.
+	 *
+	 * @return string[] Unique list of params that force a cache bypass.
+	 */
+	private static function bypass_query_strings() {
+		/**
+		 * Filter the params that force a page-cache bypass under normalisation.
+		 *
+		 * @param string[] $bypass Param names that must never be cached/normalised.
+		 */
+		$bypass = apply_filters( 'flavor_edge_pc_bypass_query_strings', array( 's' ) );
+		return array_values( array_unique( array_map( 'strval', (array) $bypass ) ) );
 	}
 
 	/** Returns a store instance for the current settings. */
@@ -337,14 +393,29 @@ class TE_PageCache {
 	 * @return string
 	 */
 	public static function capture( $html ) {
-		// Only cache a complete, successful, HTML document for anonymous users.
+		// Only cache a complete, successful response for anonymous users.
 		if ( '' === $html || http_response_code() !== 200 ) {
 			return $html;
 		}
 		if ( is_user_logged_in() || is_404() || is_search() ) {
 			return $html;
 		}
-		if ( ! self::is_html_response() ) {
+
+		$rules = self::rules_config();
+		$ctype = self::response_content_type();
+		// Empty Content-Type → WordPress default is text/html.
+		$is_html = ( '' === $ctype ) || ( false !== stripos( $ctype, 'text/html' ) );
+
+		// Store an HTML document as before, and also a content-negotiation
+		// variant (e.g. the Markdown an AI agent requested): that request is
+		// marked by the edge-set header, and the variant already goes into the
+		// key via cache_variant(). Without storing it, the page cache would serve
+		// nothing to the variant and WordPress would boot on every agent hit —
+		// the bypass load the design is meant to avoid. A variant is stored only
+		// when it is a text/* response, never an arbitrary non-HTML body.
+		$storeable = $is_html
+			|| ( self::is_variant_request( $rules ) && 0 === stripos( $ctype, 'text/' ) );
+		if ( ! $storeable ) {
 			return $html;
 		}
 
@@ -354,33 +425,49 @@ class TE_PageCache {
 			return $html;
 		}
 
-		$rules = self::rules_config();
 		$store = self::store();
 		$key   = $store->key(
 			isset( $_SERVER['HTTP_HOST'] ) ? wp_unslash( $_SERVER['HTTP_HOST'] ) : '',
 			TE_PageCache_Store::effective_uri(
 				isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '/',
-				$rules['accepted_query_strings']
+				$rules['accepted_query_strings'],
+				! empty( $rules['query_normalize'] ) ? $rules['allowed_query_strings'] : null
 			),
 			TE_PageCache_Store::cache_variant( $rules, $_SERVER )
 		);
 
 		$store->set( $key, $html, array(
-			'ctype'   => 'text/html; charset=' . get_option( 'blog_charset', 'UTF-8' ),
+			'ctype'   => ( '' !== $ctype ) ? $ctype : ( 'text/html; charset=' . get_option( 'blog_charset', 'UTF-8' ) ),
 			'headers' => self::capturable_headers(),
 		) );
 
 		return $html;
 	}
 
-	private static function is_html_response() {
+	/** The response Content-Type value (header name stripped), or '' if none was set. */
+	private static function response_content_type() {
 		foreach ( headers_list() as $h ) {
 			if ( stripos( $h, 'content-type:' ) === 0 ) {
-				return stripos( $h, 'text/html' ) !== false;
+				return trim( substr( $h, strlen( 'content-type:' ) ) );
 			}
 		}
-		// No explicit Content-Type → WordPress default is text/html.
-		return true;
+		return '';
+	}
+
+	/**
+	 * Whether this request is the configured content-negotiation variant — the
+	 * edge-set header equal to "1". Mirrors cache_variant() exactly, so what the
+	 * store path accepts and the key it writes under always agree.
+	 *
+	 * @param array $rules rules_config() output.
+	 * @return bool
+	 */
+	private static function is_variant_request( array $rules ) {
+		if ( empty( $rules['variant_header'] ) ) {
+			return false;
+		}
+		$hdr = 'HTTP_' . strtr( strtoupper( $rules['variant_header'] ), '-', '_' );
+		return isset( $_SERVER[ $hdr ] ) && '1' === $_SERVER[ $hdr ];
 	}
 
 	private static function response_sets_cookie() {
@@ -475,13 +562,15 @@ class TE_PageCache {
 			return;
 		}
 		$store    = self::store();
-		$ignored  = self::rules_config()['accepted_query_strings'];
+		$rules    = self::rules_config();
+		$ignored  = $rules['accepted_query_strings'];
+		$allowed  = ! empty( $rules['query_normalize'] ) ? $rules['allowed_query_strings'] : null;
 		$variants = self::purge_variants();
 		foreach ( (array) $urls as $url ) {
 			$parts = wp_parse_url( $url );
 			$host  = isset( $parts['host'] ) ? $parts['host'] : (string) wp_parse_url( home_url(), PHP_URL_HOST );
 			$uri   = ( isset( $parts['path'] ) ? $parts['path'] : '/' ) . ( isset( $parts['query'] ) ? '?' . $parts['query'] : '' );
-			$uri   = TE_PageCache_Store::effective_uri( $uri, $ignored );
+			$uri   = TE_PageCache_Store::effective_uri( $uri, $ignored, $allowed );
 			foreach ( $variants as $variant ) {
 				$store->delete( $store->key( $host, $uri, $variant ) );
 			}
@@ -504,16 +593,25 @@ class TE_PageCache {
 	 * @return array Variant strings.
 	 */
 	private static function purge_variants() {
-		$devices = array( 'desktop', 'mobile', 'app' );
-		if ( empty( self::rules_config()['vary_language'] ) ) {
-			return $devices;
-		}
-		$langs    = self::site_language_codes();
+		$rules    = self::rules_config();
+		$devices  = array( 'desktop', 'mobile', 'app' );
 		$variants = $devices;
-		foreach ( $devices as $device ) {
-			foreach ( $langs as $lang ) {
-				$variants[] = $device . '|' . $lang;
+		if ( ! empty( $rules['vary_language'] ) ) {
+			$langs = self::site_language_codes();
+			foreach ( $devices as $device ) {
+				foreach ( $langs as $lang ) {
+					$variants[] = $device . '|' . $lang;
+				}
 			}
+		}
+		// Content-negotiation variant on: every key may also exist under the |md
+		// suffix, so a surgical purge must clear both the default and the variant.
+		if ( ! empty( $rules['variant_header'] ) ) {
+			$md = array();
+			foreach ( $variants as $v ) {
+				$md[] = $v . '|md';
+			}
+			$variants = array_merge( $variants, $md );
 		}
 		return array_values( array_unique( $variants ) );
 	}
@@ -757,7 +855,7 @@ if ( ! \flavor_edge\TE_PageCache_Store::request_is_cacheable( $fe_cfg['rules'], 
 
 $fe_store   = new \flavor_edge\TE_PageCache_Store( $fe_cfg['store'] );
 $fe_host    = isset( $_SERVER['HTTP_HOST'] ) ? $_SERVER['HTTP_HOST'] : '';
-$fe_uri     = \flavor_edge\TE_PageCache_Store::effective_uri( isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '/', $fe_cfg['rules']['accepted_query_strings'] );
+$fe_uri     = \flavor_edge\TE_PageCache_Store::effective_uri( isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '/', $fe_cfg['rules']['accepted_query_strings'], ( ! empty( $fe_cfg['rules']['query_normalize'] ) ? $fe_cfg['rules']['allowed_query_strings'] : null ) );
 $fe_variant = \flavor_edge\TE_PageCache_Store::cache_variant( $fe_cfg['rules'], $_SERVER );
 $fe_hit     = $fe_store->get( $fe_store->key( $fe_host, $fe_uri, $fe_variant ) );
 

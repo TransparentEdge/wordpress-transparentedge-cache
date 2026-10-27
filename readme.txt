@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.11.0
+Stable tag: 1.12.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -114,6 +114,10 @@ The plugin registers a `wp te-cache` command for operations and deploy pipelines
 Soft purge is the default; add `--hard` to force an immediate purge. The commands are thin wrappers over the same hardened purge/preload APIs the plugin uses internally.
 
 == Changelog ==
+
+= 1.12.0 =
+* NEW (optional content-negotiation variant): a page can be stored and served under a second cache key when the edge sets a configured request header, so the same URL can return an alternate representation — for example a Markdown version for AI agents — without the HTML and the alternate colliding. Off by default; set the header name under TE Cache → Advanced (e.g. X-Accept-Markdown). Requirement: the edge must strip any client-supplied copy of that header and set it itself from its own content negotiation. Serve, store and invalidation share the key, so a URL purge clears both representations.
+* NEW (optional query-string normalization): an opt-in option serves cached pages for requests that carry unknown query parameters, by keeping only an allowlist of content-varying parameters in the cache key. With it on, a URL such as /page/?ref=x or /page/?zz=1 is served from cache instead of forcing a full render. Off by default; the allowlist ships with the WordPress core parameters (s, p, paged, cat, tag, author…) and is extensible in the panel (TE Cache → Advanced) and via the flavor_edge_pc_allowed_query_strings filter. Enable it only where every parameter that changes the page is listed — not on sites with faceted search or WooCommerce filters. Serve, store and invalidation all use the same normalised key, so a URL purge clears the normalised entry too.
 
 = 1.11.0 =
 Performance and reliability improvements across invalidation, the object cache and the origin page cache. Invalidation remains key-based and surgical: only what actually changed is purged.

@@ -290,6 +290,7 @@ class TE_Admin {
 			'preload_sitemap', 'preload_health_gate', 'preload_offpeak', 'preload_autotune',
 			'object_cache_auto',
 			'editorial_tune',
+			'query_normalize',
 			'heartbeat_disable_admin', 'heartbeat_disable_editor',
 			'debug_mode',
 			'speculation_enabled',
@@ -386,7 +387,7 @@ class TE_Admin {
 
 		$text_fields = array(
 			'invalidation_method', 'i3_max_length', 'delay_js_exclusions', 'defer_js_exclusions', 'combine_js_exclusions',
-			'excluded_urls', 'excluded_cookies', 'dns_prefetch_urls', 'accepted_query_strings',
+			'excluded_urls', 'excluded_cookies', 'dns_prefetch_urls', 'accepted_query_strings', 'allowed_query_strings', 'variant_header',
 			'heartbeat_behavior',
 			'speculation_mode', 'speculation_injection',
 			'ucss_exclusions',
