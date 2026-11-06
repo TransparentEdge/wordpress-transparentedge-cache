@@ -543,6 +543,26 @@ class TE_Preload {
 	 * @return \WP_REST_Response
 	 */
 	public static function health_endpoint() {
+		// Light rate limit: the endpoint is no-store, so every hit reaches the origin
+		// and runs a DB round-trip + WordPress bootstrap. Cap unauthenticated probing.
+		// Keyed on the socket IP (REMOTE_ADDR); the limit is generous (60/min) so the
+		// plugin's own pacer — which probes at most a few times a minute — never trips
+		// it. Filterable; 0 disables.
+		$limit = (int) apply_filters( 'flavor_edge_health_rate_limit', 60 );
+		if ( $limit > 0 ) {
+			$ip  = ! empty( $_SERVER['REMOTE_ADDR'] )
+				? trim( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) )
+				: '0.0.0.0';
+			$key  = 'flavor_edge_health_rate_' . md5( $ip );
+			$hits = (int) get_transient( $key );
+			if ( $hits >= $limit ) {
+				$resp = new \WP_REST_Response( array( 'ok' => false, 'error' => 'rate_limited' ), 429 );
+				$resp->header( 'Cache-Control', 'no-store, private' );
+				return $resp;
+			}
+			set_transient( $key, $hits + 1, 60 );
+		}
+
 		global $wpdb;
 		$t0    = microtime( true );
 		$db_ok = ( '1' === (string) $wpdb->get_var( 'SELECT 1' ) );

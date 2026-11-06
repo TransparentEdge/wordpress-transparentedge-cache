@@ -92,18 +92,32 @@ class TE_Rules_Rest_Controller {
 	}
 
 	/**
-	 * Get the client IP for rate limiting.
+	 * Build the per-caller identity used for rate limiting.
+	 *
+	 * Combines the socket IP (REMOTE_ADDR, which cannot be spoofed) with the
+	 * forwarded client IP. Behind the edge, REMOTE_ADDR is the edge node and the
+	 * forwarded header carries the real client, so per-client buckets are preserved;
+	 * on a direct origin hit, including the unspoofable socket IP stops a caller from
+	 * rotating buckets purely by forging X-Forwarded-For. (The real backstop is that
+	 * the rules themselves are cached in a transient, so generate() runs at most once
+	 * per CACHE_TTL regardless of request volume — this limit is only a courtesy.)
 	 *
 	 * @return string
 	 */
 	private static function get_client_ip() {
-		$headers = array( 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR' );
-		foreach ( $headers as $header ) {
+		$remote = ! empty( $_SERVER['REMOTE_ADDR'] )
+			? trim( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) )
+			: '0.0.0.0';
+
+		$forwarded = '';
+		foreach ( array( 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP' ) as $header ) {
 			if ( ! empty( $_SERVER[ $header ] ) ) {
-				$ips = explode( ',', sanitize_text_field( $_SERVER[ $header ] ) );
-				return trim( $ips[0] );
+				$ips       = explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) );
+				$forwarded = trim( $ips[0] );
+				break;
 			}
 		}
-		return '0.0.0.0';
+
+		return $remote . '|' . $forwarded;
 	}
 }
