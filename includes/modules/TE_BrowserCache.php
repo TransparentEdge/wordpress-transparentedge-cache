@@ -375,9 +375,15 @@ class TE_BrowserCache {
 			TE_Api::purge_tags( array( $site_tag ), true );
 		}
 
-		// Clear minify cache (regenerates with new content).
+		// Minify bundles: do NOT hard-delete them here. Their filenames are content-
+		// addressed, so an asset-version bump (which a plugin/theme update causes)
+		// already makes the next render emit NEW bundle names; deleting the OLD ones
+		// synchronously is exactly what 404s the HTML the edge is still serving stale
+		// against them (the soft purge above serves stale while it revalidates). Leave
+		// the old bundles in place and let the background GC reap the orphans after a
+		// grace window that outlasts the stale-HTML revalidation.
 		if ( class_exists( __NAMESPACE__ . '\\TE_Minify' ) ) {
-			TE_Minify::clear_cache();
+			TE_Minify::schedule_gc();
 		}
 	}
 

@@ -23,12 +23,25 @@ class TE_Minify {
 	const CACHE_DIR = 'cache/flavor-edge/min';
 
 	/**
+	 * Cron hook that reaps orphaned/stale minify bundles (see gc()).
+	 */
+	const GC_HOOK = 'flavor_edge_minify_gc';
+
+	/**
 	 * Initialize minification hooks.
 	 */
 	public static function init() {
 		if ( ! TE_Settings::get( 'enabled' ) ) {
 			return;
 		}
+
+		// Registrations that must survive the front-end guard below: admin-ajax runs
+		// with is_admin()/wp_doing_ajax() true and wp-cron with wp_doing_cron() true,
+		// so a handler registered AFTER the guard is never attached in the very
+		// context that fires it. (The clear-minify-cache AJAX handler used to live
+		// after the guard and so never ran.)
+		add_action( 'wp_ajax_flavor_edge_clear_minify_cache', array( __CLASS__, 'ajax_clear_cache' ) );
+		add_action( self::GC_HOOK, array( __CLASS__, 'gc' ) );
 
 		// Don't minify for logged-in users, admin, AJAX, cron.
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
@@ -64,9 +77,6 @@ class TE_Minify {
 		if ( $s['minify_js'] ) {
 			add_filter( 'script_loader_src', array( __CLASS__, 'minify_js_src' ), 10, 2 );
 		}
-
-		// Admin AJAX: clear minify cache.
-		add_action( 'wp_ajax_flavor_edge_clear_minify_cache', array( __CLASS__, 'ajax_clear_cache' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -509,6 +519,10 @@ class TE_Minify {
 			// generation and enqueue a half-written (truncated) CSS/JS. temp+rename makes
 			// the file appear only once complete. Same guarantee as the page-cache writes.
 			TE_ObjectCache::write_atomic( $cache_file, $combined_content );
+		} else {
+			// Cache hit: mark the bundle as live so the background GC never reaps a
+			// bundle still referenced by rendered pages (see gc()/maybe_touch()).
+			self::maybe_touch( $cache_file );
 		}
 
 		// Dequeue originals and enqueue combined.
@@ -669,6 +683,10 @@ class TE_Minify {
 			// generation and enqueue a half-written (truncated) CSS/JS. temp+rename makes
 			// the file appear only once complete. Same guarantee as the page-cache writes.
 			TE_ObjectCache::write_atomic( $cache_file, $combined_content );
+		} else {
+			// Cache hit: mark the bundle as live so the background GC never reaps a
+			// bundle still referenced by rendered pages (see gc()/maybe_touch()).
+			self::maybe_touch( $cache_file );
 		}
 
 		// Collect wp_localize_script data and inline scripts before dequeuing.
@@ -817,6 +835,10 @@ class TE_Minify {
 			return false;
 		}
 
+		// Cache hit: mark the file as live so the background GC never reaps a
+		// per-asset minified file still referenced by rendered pages.
+		self::maybe_touch( $cache_file );
+
 		return array(
 			'path' => $cache_file,
 			'url'  => self::get_cache_url() . '/' . $cache_key . '.' . $type,
@@ -885,6 +907,81 @@ class TE_Minify {
 	// -------------------------------------------------------------------------
 	// Cache management.
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Grace window (seconds) a minify bundle is kept after it stops being
+	 * referenced. The bundle filenames are content-addressed, so an asset-version
+	 * bump (e.g. a plugin/theme update) already makes the next render emit NEW
+	 * bundle names — deleting the OLD ones synchronously is what 404s the HTML the
+	 * edge is still serving stale against them. We instead leave old bundles in
+	 * place and let gc() reap them after this window, which must comfortably
+	 * outlast how long the edge may serve stale HTML before it revalidates.
+	 * Filterable; defaults to one day.
+	 *
+	 * @return int
+	 */
+	public static function grace() {
+		$grace = (int) apply_filters( 'flavor_edge_minify_grace', defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 );
+		return max( 300, $grace );
+	}
+
+	/**
+	 * Schedule the background GC one grace window from now. Deduped by hook, so a
+	 * burst of updates still results in a single pending sweep.
+	 */
+	public static function schedule_gc() {
+		if ( function_exists( 'wp_schedule_single_event' ) && ! wp_next_scheduled( self::GC_HOOK ) ) {
+			wp_schedule_single_event( time() + self::grace() + 60, self::GC_HOOK );
+		}
+	}
+
+	/**
+	 * Background GC (wp-cron): delete minify files not referenced within the grace
+	 * window. A live file is touch()ed on every cache hit (maybe_touch), so only
+	 * truly orphaned bundles age past the cutoff and get reaped — never a bundle a
+	 * rendered page is still pointing at. Reschedules itself while any file remains,
+	 * so orphans created after this run are still cleaned up eventually.
+	 */
+	public static function gc() {
+		$dir = self::get_cache_dir();
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+		$files = glob( $dir . '/*.{css,js}', GLOB_BRACE );
+		if ( empty( $files ) ) {
+			return;
+		}
+		$cutoff    = time() - self::grace();
+		$remaining = 0;
+		foreach ( $files as $file ) {
+			$mtime = @filemtime( $file );
+			if ( false !== $mtime && $mtime < $cutoff ) {
+				@unlink( $file );
+			} else {
+				$remaining++;
+			}
+		}
+		if ( $remaining > 0 ) {
+			self::schedule_gc();
+		}
+	}
+
+	/**
+	 * Mark a served cache file as live so gc() never reaps it. Throttled to at most
+	 * one touch per half grace window (the file only has to look "fresh enough"),
+	 * so a hot bundle is not a filesystem write on every single request.
+	 *
+	 * @param string $file Absolute path to the cache file.
+	 */
+	private static function maybe_touch( $file ) {
+		$mtime = @filemtime( $file );
+		if ( false === $mtime ) {
+			return;
+		}
+		if ( ( time() - $mtime ) > ( self::grace() / 2 ) ) {
+			@touch( $file );
+		}
+	}
 
 	/**
 	 * Clear the minification cache.
