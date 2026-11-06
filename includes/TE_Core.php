@@ -234,6 +234,12 @@ class TE_Core {
 				if ( $post_id ) {
 					$tags   = array( 'post-' . $post_id );
 					$result = TE_Api::purge_tags( $tags, true );
+					// Also clear the origin page cache for this URL (same hook the
+					// automatic tag purge fires). Without this the edge is purged but
+					// the shield keeps serving the stale copy until its TTL, and the
+					// next edge miss re-caches that stale shield copy — so the manual
+					// "Purge This Page" would look like a no-op.
+					do_action( 'flavor_edge_after_tag_purge', $result, $tags );
 					$msg    = $result['success']
 						? sprintf(
 							/* translators: %d: Post ID */
