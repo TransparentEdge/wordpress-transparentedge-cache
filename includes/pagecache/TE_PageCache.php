@@ -740,20 +740,34 @@ class TE_PageCache {
 	 */
 	private static function set_wp_cache( $enable ) {
 		$path = self::wp_config_path();
-		if ( '' === $path || ! is_writable( $path ) ) {
+		if ( '' === $path ) {
 			return array(
 				'success' => false,
 				'message' => sprintf(
 					/* translators: %s: line to add. */
-					__( 'wp-config.php is not writable. Add this near the top manually: %s', 'flavor-edge-cache' ),
+					__( 'Could not locate wp-config.php. Add this near the top manually: %s', 'flavor-edge-cache' ),
 					"define('WP_CACHE', true);"
 				),
 			);
 		}
 
-		$contents = (string) file_get_contents( $path );
+		$contents = @file_get_contents( $path );
+		if ( false === $contents ) {
+			return array(
+				'success' => false,
+				'message' => sprintf(
+					/* translators: %s: line to add. */
+					__( 'Could not read wp-config.php. Add this near the top manually: %s', 'flavor-edge-cache' ),
+					"define('WP_CACHE', true);"
+				),
+			);
+		}
 
-		// A WP_CACHE the user defined themselves (outside our markers) wins.
+		// A WP_CACHE the user defined themselves (outside our markers) wins. Check
+		// this BEFORE requiring write access: when their define already matches the
+		// desired state nothing needs writing, so a read-only (hardened) wp-config
+		// must not be reported as a failure — the cache is already active. This is
+		// the common case where the admin added define('WP_CACHE', true) by hand.
 		$without_ours = self::strip_our_block( $contents );
 		if ( preg_match( '/define\s*\(\s*[\'"]WP_CACHE[\'"]\s*,\s*(true|false)/i', $without_ours, $m ) ) {
 			$is_true = 0 === strcasecmp( $m[1], 'true' );
@@ -763,7 +777,26 @@ class TE_PageCache {
 					'message' => __( 'wp-config.php already sets WP_CACHE to false. Change it to true to enable the page cache.', 'flavor-edge-cache' ),
 				);
 			}
-			return array( 'success' => true, 'message' => '' ); // Their define already matches.
+			return array( 'success' => true, 'message' => '' ); // Their define already matches — no write needed.
+		}
+
+		// From here we may need to MODIFY wp-config.php (add or strip our own block),
+		// so now — and only now — it must be writable. Checking writability here
+		// instead of up front is what lets a user-defined WP_CACHE above be honoured
+		// even when the file is read-only.
+		if ( ! is_writable( $path ) ) {
+			// Disabling and we have no block of ours to strip → nothing to do.
+			if ( ! $enable && false === strpos( $contents, self::WPCONFIG_BEGIN ) ) {
+				return array( 'success' => true, 'message' => '' );
+			}
+			return array(
+				'success' => false,
+				'message' => sprintf(
+					/* translators: %s: line to add. */
+					__( 'wp-config.php is not writable. Add this near the top manually: %s', 'flavor-edge-cache' ),
+					"define('WP_CACHE', true);"
+				),
+			);
 		}
 
 		// Remove any previous block of ours, then add one if enabling.
