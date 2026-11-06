@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.12.0
+Stable tag: 1.12.1
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -114,6 +114,14 @@ The plugin registers a `wp te-cache` command for operations and deploy pipelines
 Soft purge is the default; add `--hard` to force an immediate purge. The commands are thin wrappers over the same hardened purge/preload APIs the plugin uses internally.
 
 == Changelog ==
+
+= 1.12.1 =
+Maintenance release — correctness and robustness fixes, no new features.
+* Minify: combined CSS/JS bundles are no longer removed the moment a plugin or theme updates. They are kept for a grace window and reaped by a background task, so pages still cached at the edge that reference an older bundle keep resolving until they refresh. Bundles (and per-asset minified files) are now written atomically (temp + rename), and the "Clear Minify Cache" button runs reliably again.
+* Origin page cache: a menu or widget/sidebar change now also clears the origin page cache, not only the edge, so a global change is reflected on every page. The admin-bar "Purge This Page" now clears the origin page cache as well as the edge.
+* Origin page cache coherence with the header layer: responses for password-protected posts, comment-moderation views, logged-in users and WooCommerce sessions are never stored by the origin page cache, and a response the site marks private / no-store / no-cache is honoured. New filter alignment via flavor_edge_always_excluded_cookies.
+* Page cache activation: enabling no longer reports a false "wp-config.php is not writable" error when the site already defines WP_CACHE itself.
+* REST endpoints: hardened rate limiting for the speculation-rules and health endpoints (new filter flavor_edge_health_rate_limit).
 
 = 1.12.0 =
 * NEW (optional content-negotiation variant): a page can be stored and served under a second cache key when the edge sets a configured request header, so the same URL can return an alternate representation — for example a Markdown version for AI agents — without the HTML and the alternate colliding. Off by default; set the header name under TE Cache → Advanced (e.g. X-Accept-Markdown). Requirement: the edge must strip any client-supplied copy of that header and set it itself from its own content negotiation. Serve, store and invalidation share the key, so a URL purge clears both representations.
