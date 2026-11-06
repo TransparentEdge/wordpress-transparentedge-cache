@@ -502,7 +502,13 @@ class TE_Minify {
 			if ( ! is_dir( self::get_cache_dir() ) ) {
 				wp_mkdir_p( self::get_cache_dir() );
 			}
-			file_put_contents( $cache_file, $combined_content );
+			// Atomic write (temp + rename): the bundle is served DIRECTLY by the web
+			// server as a static file, and the URL is enqueued the moment this returns.
+			// An in-place file_put_contents creates the file immediately and fills it
+			// progressively, so a concurrent request can see file_exists()===true, skip
+			// generation and enqueue a half-written (truncated) CSS/JS. temp+rename makes
+			// the file appear only once complete. Same guarantee as the page-cache writes.
+			TE_ObjectCache::write_atomic( $cache_file, $combined_content );
 		}
 
 		// Dequeue originals and enqueue combined.
@@ -656,7 +662,13 @@ class TE_Minify {
 			if ( ! is_dir( self::get_cache_dir() ) ) {
 				wp_mkdir_p( self::get_cache_dir() );
 			}
-			file_put_contents( $cache_file, $combined_content );
+			// Atomic write (temp + rename): the bundle is served DIRECTLY by the web
+			// server as a static file, and the URL is enqueued the moment this returns.
+			// An in-place file_put_contents creates the file immediately and fills it
+			// progressively, so a concurrent request can see file_exists()===true, skip
+			// generation and enqueue a half-written (truncated) CSS/JS. temp+rename makes
+			// the file appear only once complete. Same guarantee as the page-cache writes.
+			TE_ObjectCache::write_atomic( $cache_file, $combined_content );
 		}
 
 		// Collect wp_localize_script data and inline scripts before dequeuing.
@@ -842,7 +854,9 @@ class TE_Minify {
 		$cache_key  = self::get_cache_key( $source_path );
 		$cache_file = $cache_dir . '/' . $cache_key . '.' . $type;
 
-		if ( false === file_put_contents( $cache_file, $content ) ) {
+		// Atomic write: this per-asset minified file is served directly by the web
+		// server, so a concurrent reader must never catch it mid-write (truncated).
+		if ( ! TE_ObjectCache::write_atomic( $cache_file, $content ) ) {
 			return false;
 		}
 
