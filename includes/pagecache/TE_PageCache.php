@@ -519,6 +519,21 @@ class TE_PageCache {
 		if ( ! self::is_enabled() || empty( $tags ) ) {
 			return;
 		}
+
+		// Global tags: a menu or sidebar/widget change affects (almost) every page,
+		// so no finite URL list covers it. Without flushing, the shield would keep
+		// serving the old menu/widget on every page until its TTL, and the warmup
+		// would re-cache that stale shield copy back into the edge. Flush the whole
+		// shield instead; grace + warmup repopulate it. (Header tags are
+		// sanitize_key'd — lowercased — so the prefixes match.)
+		foreach ( (array) $tags as $tag ) {
+			$tag = (string) $tag;
+			if ( 0 === strpos( $tag, 'menu-' ) || 0 === strpos( $tag, 'sidebar-' ) ) {
+				self::flush_all();
+				return;
+			}
+		}
+
 		$urls = array();
 		foreach ( (array) $tags as $tag ) {
 			$tag = (string) $tag;
