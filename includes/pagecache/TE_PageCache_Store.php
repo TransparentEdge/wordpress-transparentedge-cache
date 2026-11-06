@@ -754,6 +754,20 @@ class TE_PageCache_Store {
 					}
 				}
 			}
+
+			// Always-excluded cookies (prefix match), enforced regardless of the admin
+			// list: password-protected posts (wp-postpass_), a commenter's moderation
+			// view (comment_author_), logged-in (wordpress_logged_in_/_sec_) and the
+			// WooCommerce session/cart cookies. Without this the shield could store a
+			// gated/personalised response under a shared key and serve it to everyone.
+			$always = (array) ( $cfg['always_excluded_cookies'] ?? array() );
+			foreach ( array_keys( $cookies ) as $name ) {
+				foreach ( $always as $prefix ) {
+					if ( '' !== $prefix && 0 === strpos( $name, (string) $prefix ) ) {
+						return false;
+					}
+				}
+			}
 		}
 
 		// Query string handling.

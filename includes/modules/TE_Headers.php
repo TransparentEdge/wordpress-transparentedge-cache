@@ -462,9 +462,15 @@ VCL;
 	/**
 	 * Check if the current request should not be cached.
 	 *
+	 * Public so the origin page cache (TE_PageCache) can apply the exact same
+	 * "uncacheable" verdict before it STORES a response — otherwise the shield's
+	 * pre-boot-safe subset could cache what this layer (and the edge) treat as
+	 * private (WooCommerce cart/checkout, anything a module marks via the
+	 * flavor_edge_is_uncacheable filter, the customizer preview, …).
+	 *
 	 * @return bool
 	 */
-	private static function is_uncacheable_request() {
+	public static function is_uncacheable_request() {
 		// Logged-in users.
 		if ( is_user_logged_in() ) {
 			return true;

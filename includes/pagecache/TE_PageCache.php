@@ -218,9 +218,13 @@ class TE_PageCache {
 			return array_values( array_filter( array_map( 'trim', explode( "\n", (string) TE_Settings::get( $key, '' ) ) ) ) );
 		};
 		return array(
-			'excluded_urls'          => $lines( 'excluded_urls' ),
-			'excluded_cookies'       => $lines( 'excluded_cookies' ),
-			'accepted_query_strings' => $lines( 'accepted_query_strings' ),
+			'excluded_urls'           => $lines( 'excluded_urls' ),
+			'excluded_cookies'        => $lines( 'excluded_cookies' ),
+			// Cookies that always bypass the shield, independent of the admin list —
+			// baked into the generated drop-in config so the pre-boot serve path has
+			// them too (it can't call filters). Mirrors TE_Headers' always-list.
+			'always_excluded_cookies' => self::always_excluded_cookies(),
+			'accepted_query_strings'  => $lines( 'accepted_query_strings' ),
 			'query_normalize'        => ! empty( TE_Settings::get( 'query_normalize' ) ),
 			'allowed_query_strings'  => self::allowed_query_strings( $lines( 'allowed_query_strings' ) ),
 			'bypass_query_strings'   => self::bypass_query_strings(),
@@ -280,6 +284,26 @@ class TE_PageCache {
 		 */
 		$bypass = apply_filters( 'flavor_edge_pc_bypass_query_strings', array( 's' ) );
 		return array_values( array_unique( array_map( 'strval', (array) $bypass ) ) );
+	}
+
+	/**
+	 * Cookie name prefixes that must ALWAYS bypass the origin page cache, regardless
+	 * of the admin-configured excluded_cookies list. These carry per-visitor or
+	 * gated state, so storing/serving the response under a shared key would leak it:
+	 * wp-postpass_ (a password-protected post's unlocked body), comment_author_ (a
+	 * commenter's moderation view), wordpress_logged_in_/wordpress_sec_ (logged-in),
+	 * and the WooCommerce session/cart cookies. The same filter TE_Headers uses, so
+	 * both layers stay in sync; the result is baked into the drop-in config because
+	 * the pre-boot serve path cannot run filters.
+	 *
+	 * @return string[]
+	 */
+	private static function always_excluded_cookies() {
+		$cookies = apply_filters(
+			'flavor_edge_always_excluded_cookies',
+			array( 'wp-postpass_', 'comment_author_', 'wp_woocommerce_session_', 'woocommerce_cart_hash', 'wordpress_logged_in_', 'wordpress_sec_' )
+		);
+		return array_values( array_unique( array_map( 'strval', (array) $cookies ) ) );
 	}
 
 	/** Returns a store instance for the current settings. */
@@ -382,6 +406,14 @@ class TE_PageCache {
 		if ( is_user_logged_in() ) {
 			return;
 		}
+		// Apply the full "uncacheable" verdict the headers/edge layer uses, so the
+		// shield never stores what the edge treats as private. request_is_cacheable
+		// above is the pre-boot-safe subset (cookies/urls/query); this adds the
+		// full-WordPress checks only available now (conditional tags and the
+		// flavor_edge_is_uncacheable filter — e.g. WooCommerce cart/checkout/account).
+		if ( class_exists( __NAMESPACE__ . '\\TE_Headers' ) && TE_Headers::is_uncacheable_request() ) {
+			return;
+		}
 		self::$buffering = true;
 		ob_start( array( __CLASS__, 'capture' ) );
 	}
@@ -422,6 +454,15 @@ class TE_PageCache {
 		// Never store a response that sets a cookie: Varnish refuses to cache
 		// those, and the rendered body may carry a per-visitor token.
 		if ( self::response_sets_cookie() ) {
+			return $html;
+		}
+
+		// Never store a response the origin itself marked non-cacheable, even when it
+		// set no cookie: a theme/plugin sending Cache-Control: private / no-store /
+		// no-cache (or max-age=0) is explicitly opting that page out. The plugin's own
+		// cacheable responses send "public, max-age=<n>, s-maxage=…", so this does not
+		// catch them.
+		if ( self::response_is_private() ) {
 			return $html;
 		}
 
@@ -473,6 +514,29 @@ class TE_PageCache {
 	private static function response_sets_cookie() {
 		foreach ( headers_list() as $h ) {
 			if ( stripos( $h, 'set-cookie:' ) === 0 ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the response's own Cache-Control marks it non-cacheable
+	 * (private / no-store / no-cache / max-age=0). Used so the shield honours an
+	 * explicit opt-out from the theme or another plugin even when no cookie is set.
+	 *
+	 * @return bool
+	 */
+	private static function response_is_private() {
+		foreach ( headers_list() as $h ) {
+			if ( stripos( $h, 'cache-control:' ) !== 0 ) {
+				continue;
+			}
+			$v = strtolower( $h );
+			if ( false !== strpos( $v, 'no-store' )
+				|| false !== strpos( $v, 'no-cache' )
+				|| false !== strpos( $v, 'private' )
+				|| preg_match( '/max-age\s*=\s*0(?![0-9])/', $v ) ) {
 				return true;
 			}
 		}
