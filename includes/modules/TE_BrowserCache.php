@@ -345,7 +345,7 @@ class TE_BrowserCache {
 	private static function queue_media_urls( $attachment_id ) {
 		$url = wp_get_attachment_url( $attachment_id );
 		if ( $url ) {
-			TE_Invalidation::queue_urls( array( $url ) );
+			TE_Invalidation::queue_urls( array( $url ), 'media #' . $attachment_id );
 		}
 
 		$metadata = wp_get_attachment_metadata( $attachment_id );
@@ -372,7 +372,9 @@ class TE_BrowserCache {
 		// Soft purge static assets via site tag — avoids thundering herd.
 		if ( TE_Settings::is_connected() ) {
 			$site_tag = 'site-' . get_current_blog_id();
+			TE_Api::set_context( 'theme/plugin update' );
 			TE_Api::purge_tags( array( $site_tag ), true );
+			TE_Api::set_context( '' );
 		}
 
 		// Minify bundles: do NOT hard-delete them here. Their filenames are content-

@@ -196,6 +196,134 @@ class TE_Api {
 		);
 	}
 
+	// -------------------------------------------------------------------------
+	// Purge log: what was purged, why, by whom, with what result.
+	// -------------------------------------------------------------------------
+
+	/** Option holding the recent purge log (newest first, not autoloaded). */
+	const PURGE_LOG_OPTION = 'flavor_edge_purge_log';
+
+	/** Label of what triggered the purges that follow (set by the caller). */
+	private static $log_context = '';
+
+	/** Entries buffered during this request; persisted once, at shutdown. */
+	private static $log_buffer = array();
+
+	/**
+	 * Label the purges that follow with what triggered them (e.g. "post #123
+	 * published", "menu updated", "admin bar: purge all"). Shown in the History tab.
+	 *
+	 * @param string $label Context label.
+	 */
+	public static function set_context( $label ) {
+		self::$log_context = (string) $label;
+	}
+
+	/**
+	 * Purge a list of URLs (logged). See purge_urls_raw() for the API call.
+	 */
+	public static function purge_urls( $urls, $soft = true, $refetch = false, $async = false ) {
+		$result = self::purge_urls_raw( $urls, $soft, $refetch, $async );
+		self::log_purge( 'urls', (array) $urls, $soft, $refetch, $result );
+		return $result;
+	}
+
+	/**
+	 * Purge by surrogate-key tags (logged). See purge_tags_raw() for the API call.
+	 */
+	public static function purge_tags( $tags, $soft = true, $async = false ) {
+		$result = self::purge_tags_raw( $tags, $soft, $async );
+		self::log_purge( 'tags', (array) $tags, $soft, false, $result );
+		return $result;
+	}
+
+	/**
+	 * Ban (hard invalidation by URL pattern) (logged). See ban_raw().
+	 */
+	public static function ban( $url_pattern ) {
+		$result = self::ban_raw( $url_pattern );
+		self::log_purge( 'ban', array( (string) $url_pattern ), false, false, $result );
+		return $result;
+	}
+
+	/**
+	 * Most recent purge-log entries, newest first.
+	 *
+	 * @param int $limit Max entries.
+	 * @return array[] { t, ctx, kind, n, items, soft, refetch, ok, msg, user }
+	 */
+	public static function get_purge_log( $limit = 100 ) {
+		$log = get_option( self::PURGE_LOG_OPTION, array() );
+		return is_array( $log ) ? array_slice( $log, 0, max( 1, (int) $limit ) ) : array();
+	}
+
+	/**
+	 * Buffer one purge-log entry. Bulk warming (context "preload") is logged only
+	 * when it fails, so a full-site preload does not push editorial purges out of
+	 * the log. Disable entirely with the flavor_edge_purge_log_enabled filter.
+	 */
+	private static function log_purge( $kind, array $items, $soft, $refetch, $result ) {
+		if ( ! function_exists( 'apply_filters' ) || ! apply_filters( 'flavor_edge_purge_log_enabled', true ) ) {
+			return;
+		}
+		$ctx = self::$log_context;
+		if ( '' === $ctx ) {
+			if ( defined( 'WP_CLI' ) && WP_CLI ) {
+				$ctx = 'wp-cli';
+			} elseif ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) {
+				$ctx = 'cron';
+			} else {
+				$ctx = 'request';
+			}
+		}
+		$ok = is_array( $result ) && ! empty( $result['success'] );
+		if ( 'preload' === $ctx && $ok ) {
+			return;
+		}
+		$user = function_exists( 'wp_get_current_user' ) ? wp_get_current_user() : null;
+
+		self::$log_buffer[] = array(
+			't'       => time(),
+			'ctx'     => substr( $ctx, 0, 200 ),
+			'kind'    => $kind,
+			'n'       => count( $items ),
+			'items'   => array_slice( array_values( array_map( 'strval', $items ) ), 0, 20 ),
+			'soft'    => (bool) $soft,
+			'refetch' => (bool) $refetch,
+			'ok'      => $ok,
+			'msg'     => ( is_array( $result ) && isset( $result['message'] ) ) ? substr( (string) $result['message'], 0, 200 ) : '',
+			'user'    => ( $user && $user->exists() ) ? $user->user_login : '',
+		);
+
+		// One option write per request, after every purge of the request (the
+		// invalidation queue itself flushes at shutdown priority 1).
+		static $hooked = false;
+		if ( ! $hooked && function_exists( 'add_action' ) ) {
+			$hooked = true;
+			add_action( 'shutdown', array( __CLASS__, 'persist_purge_log' ), 99 );
+		}
+	}
+
+	/**
+	 * Persist the buffered entries (newest first, capped). Concurrent requests may
+	 * occasionally lose an entry to a read-modify-write race; acceptable for a
+	 * diagnostic log, and it avoids a custom table.
+	 */
+	public static function persist_purge_log() {
+		if ( empty( self::$log_buffer ) ) {
+			return;
+		}
+		$max = max( 10, (int) apply_filters( 'flavor_edge_purge_log_size', 100 ) );
+		$log = get_option( self::PURGE_LOG_OPTION, array() );
+		if ( ! is_array( $log ) ) {
+			$log = array();
+		}
+		$log              = array_slice( array_merge( array_reverse( self::$log_buffer ), $log ), 0, $max );
+		self::$log_buffer = array();
+		update_option( self::PURGE_LOG_OPTION, $log, false );
+	}
+
+
 	/**
 	 * Invalidate URLs via purge or soft purge.
 	 *
@@ -204,7 +332,7 @@ class TE_Api {
 	 * @param bool   $refetch Warm-up cache after purge.
 	 * @return array { success: bool, message: string, urls_sent: int }
 	 */
-	public static function purge_urls( $urls, $soft = true, $refetch = false, $async = false ) {
+	private static function purge_urls_raw( $urls, $soft = true, $refetch = false, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
 			return array( 'success' => false, 'message' => 'No valid API token', 'urls_sent' => 0 );
@@ -357,7 +485,7 @@ class TE_Api {
 	 * @param bool  $soft Use soft purge.
 	 * @return array { success: bool, message: string }
 	 */
-	public static function purge_tags( $tags, $soft = true, $async = false ) {
+	private static function purge_tags_raw( $tags, $soft = true, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
 			return array( 'success' => false, 'message' => 'No valid API token' );
@@ -408,7 +536,7 @@ class TE_Api {
 	 * @param string $url_pattern URL pattern to ban (e.g., https://example.com/blog/).
 	 * @return array { success: bool, message: string }
 	 */
-	public static function ban( $url_pattern ) {
+	private static function ban_raw( $url_pattern ) {
 		$token = self::get_token();
 		if ( ! $token ) {
 			return array( 'success' => false, 'message' => 'No valid API token' );

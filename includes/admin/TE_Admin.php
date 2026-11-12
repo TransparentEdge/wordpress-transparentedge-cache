@@ -473,6 +473,7 @@ class TE_Admin {
 			wp_send_json_error( 'Unauthorized' );
 		}
 
+		TE_Api::set_context( 'dashboard: purge all' );
 		$result = TE_Api::purge_all();
 
 		// Fire the same hook the automatic full purge fires (TE_Invalidation::

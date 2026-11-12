@@ -45,6 +45,24 @@ class TE_Invalidation {
 	private static $full_purge_pending = false;
 
 	/**
+	 * What triggered the queued purges in this request (for the purge log).
+	 *
+	 * @var string[]
+	 */
+	private static $events = array();
+
+	/**
+	 * Record what triggered queued purges; shown as the context in the purge log.
+	 *
+	 * @param string $label Short description ("post #12 published/updated", "menu #3"…).
+	 */
+	public static function note( $label ) {
+		if ( '' !== (string) $label ) {
+			self::$events[] = (string) $label;
+		}
+	}
+
+	/**
 	 * Initialize invalidation hooks.
 	 */
 	public static function init() {
@@ -182,6 +200,7 @@ class TE_Invalidation {
 	 * @param array      $commentdata      Comment data.
 	 */
 	public static function on_new_comment( $comment_id, $comment_approved, $commentdata ) {
+		self::note( 'comment #' . $comment_id );
 		if ( 1 === $comment_approved || '1' === $comment_approved ) {
 			$comment = get_comment( $comment_id );
 			if ( $comment && $comment->comment_post_ID ) {
@@ -198,6 +217,7 @@ class TE_Invalidation {
 	 * @param array $data       Comment data.
 	 */
 	public static function on_edit_comment( $comment_id, $data ) {
+		self::note( 'comment #' . $comment_id . ' edited' );
 		$comment = get_comment( $comment_id );
 		if ( $comment && $comment->comment_post_ID ) {
 			self::$pending_tags[] = 'post-' . $comment->comment_post_ID;
@@ -212,6 +232,7 @@ class TE_Invalidation {
 	 * @param string $status     New status.
 	 */
 	public static function on_comment_status( $comment_id, $status ) {
+		self::note( 'comment #' . $comment_id . ' ' . $status );
 		$comment = get_comment( $comment_id );
 		if ( $comment && $comment->comment_post_ID ) {
 			self::$pending_tags[] = 'post-' . $comment->comment_post_ID;
@@ -225,6 +246,7 @@ class TE_Invalidation {
 	 * @param int $menu_id Menu ID.
 	 */
 	public static function on_menu_update( $menu_id ) {
+		self::note( 'menu #' . $menu_id . ' updated' );
 		$locations = get_nav_menu_locations();
 		foreach ( $locations as $location => $assigned_menu_id ) {
 			if ( (int) $assigned_menu_id === (int) $menu_id ) {
@@ -244,6 +266,7 @@ class TE_Invalidation {
 	 * Handle widget update.
 	 */
 	public static function on_widget_update() {
+		self::note( 'widgets updated' );
 		// Sidebars are global — purge all pages that contain them.
 		global $wp_registered_sidebars;
 		if ( ! empty( $wp_registered_sidebars ) ) {
@@ -260,6 +283,7 @@ class TE_Invalidation {
 	 * Handle theme switch — full purge.
 	 */
 	public static function on_theme_switch() {
+		self::note( 'theme switched' );
 		self::$full_purge_pending = true;
 
 		// Unused CSS depends on the active theme — regenerate.
@@ -279,6 +303,7 @@ class TE_Invalidation {
 	 * @param bool   $network_wide Whether this is a network-wide action.
 	 */
 	public static function on_plugin_change( $plugin, $network_wide = false ) {
+		self::note( 'plugin ' . ( 'deactivated_plugin' === current_action() ? 'deactivated' : 'activated' ) . ': ' . $plugin );
 		// Don't purge when our own plugin is being deactivated —
 		// at that point the API credentials may already be unavailable.
 		if ( FLAVOR_EDGE_BASENAME === $plugin ) {
@@ -320,6 +345,7 @@ class TE_Invalidation {
 	 * @param string $taxonomy Taxonomy slug.
 	 */
 	public static function on_term_edit( $term_id, $tt_id, $taxonomy ) {
+		self::note( $taxonomy . ' #' . $term_id . ' edited' );
 		// The pages that display the term (singles carrying term-<id>, its archive)
 		// and its own listing. Not tax-<taxonomy>: every single with any term of the
 		// taxonomy carried it, so editing one tag invalidated the whole site.
@@ -342,6 +368,7 @@ class TE_Invalidation {
 	 * @param mixed  $deleted_term Deleted term object.
 	 */
 	public static function on_term_delete( $term_id, $tt_id, $taxonomy, $deleted_term ) {
+		self::note( $taxonomy . ' #' . $term_id . ' deleted' );
 		// See on_term_edit(): term-<id> covers every page that showed the term.
 		self::$pending_tags[] = 'term-' . $term_id;
 		self::$pending_tags[] = 'lst-term-' . $term_id;
@@ -356,6 +383,7 @@ class TE_Invalidation {
 	 * @param \WC_Product $product Product object.
 	 */
 	public static function on_woo_stock_change( $product ) {
+		self::note( 'stock change' . ( method_exists( $product, 'get_id' ) ? ' #' . $product->get_id() : '' ) );
 		if ( method_exists( $product, 'get_id' ) ) {
 			$product_id = $product->get_id();
 			self::$pending_tags[] = 'post-' . $product_id;
@@ -401,6 +429,8 @@ class TE_Invalidation {
 	 *                            re-cache a 404 for a now-unviewable permalink.
 	 */
 	private static function queue_post_tags( $post_id, $post, $warm_self = true ) {
+		self::note( sprintf( '%s #%d %s', $post->post_type, $post_id, $warm_self ? 'published/updated' : 'unpublished/deleted' ) );
+
 		// Debounce: editors often hit "Update" several times in a row. If this
 		// exact post was already queued very recently, skip re-queuing its tags
 		// and warm-up URLs to avoid repeated purge+warm cycles against origin.
@@ -553,6 +583,10 @@ class TE_Invalidation {
 	 * Called at shutdown to batch all purge requests.
 	 */
 	public static function flush_queue() {
+		// Purge log: label every API purge below with what triggered it.
+		$events = array_values( array_unique( self::$events ) );
+		TE_Api::set_context( $events ? 'auto: ' . implode( '; ', array_slice( $events, 0, 5 ) ) . ( count( $events ) > 5 ? '; +' . ( count( $events ) - 5 ) . ' more' : '' ) : 'auto' );
+
 		// R1: the shutdown purge/refetch runs with a SHORT timeout (async flag) so a
 		// publish never holds a PHP-FPM worker for the full ~25-35s of serial HTTPS
 		// round-trips — each call is capped to a few seconds. Explicit purges (admin
@@ -580,6 +614,8 @@ class TE_Invalidation {
 			}
 
 			self::$warmup_urls = array();
+			self::$events      = array();
+			TE_Api::set_context( '' );
 			return;
 		}
 
@@ -637,6 +673,8 @@ class TE_Invalidation {
 		self::$pending_tags = array();
 		self::$pending_urls = array();
 		self::$warmup_urls  = array();
+		self::$events       = array();
+		TE_Api::set_context( '' );
 	}
 
 	/**
@@ -800,18 +838,22 @@ class TE_Invalidation {
 	/**
 	 * Manually add tags to the purge queue.
 	 *
-	 * @param array $tags Tags to add.
+	 * @param array  $tags  Tags to add.
+	 * @param string $label Optional: what triggered it (purge log).
 	 */
-	public static function queue_tags( $tags ) {
+	public static function queue_tags( $tags, $label = '' ) {
+		self::note( $label );
 		self::$pending_tags = array_merge( self::$pending_tags, (array) $tags );
 	}
 
 	/**
 	 * Manually add URLs to the purge queue.
 	 *
-	 * @param array $urls URLs to add.
+	 * @param array  $urls  URLs to add.
+	 * @param string $label Optional: what triggered it (purge log).
 	 */
-	public static function queue_urls( $urls ) {
+	public static function queue_urls( $urls, $label = '' ) {
+		self::note( $label );
 		self::$pending_urls = array_merge( self::$pending_urls, (array) $urls );
 	}
 

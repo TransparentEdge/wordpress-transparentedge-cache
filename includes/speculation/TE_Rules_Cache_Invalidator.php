@@ -55,7 +55,9 @@ class TE_Rules_Cache_Invalidator {
 		// 2. Purge the JSON from edge via Surrogate-Key.
 		if ( TE_Settings::is_connected() ) {
 			$tag = 'speculation-rules-' . get_current_blog_id();
+			TE_Api::set_context( 'speculation rules changed' );
 			TE_Api::purge_tags( array( $tag ), true );
+			TE_Api::set_context( '' );
 		}
 
 		/**

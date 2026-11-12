@@ -335,7 +335,7 @@ class TE_WooCommerce {
 			}
 		}
 
-		TE_Invalidation::queue_tags( $tags );
+		TE_Invalidation::queue_tags( $tags, 'product #' . $product->get_id() );
 
 		// Queue warm-up URLs via the public API.
 		if ( TE_Settings::get( 'refetch_enabled' ) ) {

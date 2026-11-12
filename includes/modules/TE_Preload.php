@@ -338,7 +338,9 @@ class TE_Preload {
 		if ( 'prefetch' === $method ) {
 			$result = TE_Api::prefetch( $batch );
 		} else {
+			TE_Api::set_context( 'preload' ); // logged only on failure (bulk warming).
 			$result = TE_Api::purge_urls( $batch, true, true ); // soft purge + aggregated refetch.
+			TE_Api::set_context( '' );
 		}
 
 		$status['last_batch'] = time();

@@ -1107,7 +1107,57 @@ defined( 'ABSPATH' ) || exit;
 		<!-- INVALIDATION HISTORY TAB -->
 		<div class="te-panel" data-panel="log">
 			<h2><?php esc_html_e( 'Invalidation History', 'flavor-edge-cache' ); ?></h2>
-			<p class="te-description"><?php esc_html_e( 'All invalidation events are registered in the Transparent Edge dashboard via the API. No local log needed.', 'flavor-edge-cache' ); ?></p>
+			<p class="te-description"><?php esc_html_e( 'The latest purges this site sent to Transparent Edge: what triggered each one, what was purged and the result. Bulk preload batches are listed only when they fail.', 'flavor-edge-cache' ); ?></p>
+
+			<?php
+			$fe_log = \flavor_edge\TE_Api::get_purge_log( 50 );
+			if ( empty( $fe_log ) ) :
+				?>
+				<p><em><?php esc_html_e( 'No purges recorded yet.', 'flavor-edge-cache' ); ?></em></p>
+			<?php else : ?>
+				<table class="widefat striped" style="margin-bottom:24px;">
+					<thead>
+						<tr>
+							<th style="width:140px;"><?php esc_html_e( 'Date', 'flavor-edge-cache' ); ?></th>
+							<th><?php esc_html_e( 'Triggered by', 'flavor-edge-cache' ); ?></th>
+							<th style="width:110px;"><?php esc_html_e( 'Type', 'flavor-edge-cache' ); ?></th>
+							<th><?php esc_html_e( 'Purged', 'flavor-edge-cache' ); ?></th>
+							<th style="width:150px;"><?php esc_html_e( 'Result', 'flavor-edge-cache' ); ?></th>
+							<th style="width:90px;"><?php esc_html_e( 'User', 'flavor-edge-cache' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+					<?php foreach ( $fe_log as $fe_e ) : ?>
+						<?php
+						$fe_items = isset( $fe_e['items'] ) ? (array) $fe_e['items'] : array();
+						$fe_n     = isset( $fe_e['n'] ) ? (int) $fe_e['n'] : count( $fe_items );
+						$fe_more  = $fe_n > count( $fe_items ) ? ' (+' . ( $fe_n - count( $fe_items ) ) . ')' : '';
+						$fe_mode  = array();
+						if ( ! empty( $fe_e['soft'] ) ) {
+							$fe_mode[] = 'soft';
+						}
+						if ( ! empty( $fe_e['refetch'] ) ) {
+							$fe_mode[] = 'refetch';
+						}
+						?>
+						<tr>
+							<td><?php echo esc_html( wp_date( 'Y-m-d H:i:s', (int) ( $fe_e['t'] ?? 0 ) ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $fe_e['ctx'] ?? '' ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $fe_e['kind'] ?? '' ) . ( $fe_mode ? ' · ' . implode( ', ', $fe_mode ) : '' ) ); ?></td>
+							<td><code style="white-space:normal;word-break:break-all;"><?php echo esc_html( implode( ' ', $fe_items ) . $fe_more ); ?></code></td>
+							<td>
+								<?php if ( ! empty( $fe_e['ok'] ) ) : ?>
+									<span style="color:#155724;font-weight:600;">✓</span> <?php echo esc_html( (string) ( $fe_e['msg'] ?? '' ) ); ?>
+								<?php else : ?>
+									<span style="color:#b32d2e;font-weight:600;">✗</span> <?php echo esc_html( (string) ( $fe_e['msg'] ?? '' ) ); ?>
+								<?php endif; ?>
+							</td>
+							<td><?php echo esc_html( (string) ( $fe_e['user'] ?? '' ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
 
 			<?php if ( $connected ) : ?>
 			<div style="text-align:center;padding:40px 20px;">

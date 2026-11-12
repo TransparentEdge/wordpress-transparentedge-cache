@@ -219,6 +219,7 @@ class TE_Core {
 
 		switch ( $action ) {
 			case 'purge_all':
+				TE_Api::set_context( 'admin bar: purge all' );
 				$result = TE_Api::purge_all();
 				// Also flush the origin page cache and kick the preload (same hook
 				// the automatic full purge fires). See TE_Admin::ajax_purge_all.
@@ -233,6 +234,7 @@ class TE_Core {
 				$post_id = (int) ( $_GET['flavor_edge_post'] ?? 0 );
 				if ( $post_id ) {
 					$tags   = array( 'post-' . $post_id );
+					TE_Api::set_context( 'admin bar: purge page #' . $post_id );
 					$result = TE_Api::purge_tags( $tags, true );
 					// Also clear the origin page cache for this URL (same hook the
 					// automatic tag purge fires). Without this the edge is purged but

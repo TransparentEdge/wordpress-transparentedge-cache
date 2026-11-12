@@ -347,6 +347,64 @@ class TE_CLI {
 	}
 
 	/**
+	 * Show the recent purge log: what triggered each purge, what was purged and the result.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--limit=<n>]
+	 * : Number of entries (newest first).
+	 * ---
+	 * default: 20
+	 * ---
+	 *
+	 * [--format=<format>]
+	 * : Output format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - json
+	 *   - csv
+	 *   - yaml
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp te-cache log
+	 *     wp te-cache log --limit=50 --format=json
+	 *
+	 * @when after_wp_load
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Flags.
+	 */
+	public function log( $args, $assoc_args ) {
+		$limit  = isset( $assoc_args['limit'] ) ? max( 1, (int) $assoc_args['limit'] ) : 20;
+		$format = isset( $assoc_args['format'] ) ? (string) $assoc_args['format'] : 'table';
+		$rows   = array();
+		foreach ( TE_Api::get_purge_log( $limit ) as $e ) {
+			$items = isset( $e['items'] ) ? (array) $e['items'] : array();
+			$n     = isset( $e['n'] ) ? (int) $e['n'] : count( $items );
+			$shown = 'table' === $format ? array_slice( $items, 0, 6 ) : $items;
+			$rows[] = array(
+				'date'         => wp_date( 'Y-m-d H:i:s', (int) ( $e['t'] ?? 0 ) ),
+				'triggered_by' => (string) ( $e['ctx'] ?? '' ),
+				'type'         => trim( (string) ( $e['kind'] ?? '' ) . ( ! empty( $e['soft'] ) ? ' soft' : '' ) . ( ! empty( $e['refetch'] ) ? ' refetch' : '' ) ),
+				'count'        => $n,
+				'purged'       => implode( ' ', $shown ) . ( $n > count( $shown ) ? ' (+' . ( $n - count( $shown ) ) . ')' : '' ),
+				'ok'           => ! empty( $e['ok'] ) ? 'yes' : 'no',
+				'message'      => (string) ( $e['msg'] ?? '' ),
+				'user'         => (string) ( $e['user'] ?? '' ),
+			);
+		}
+		if ( empty( $rows ) ) {
+			\WP_CLI::log( 'No purges recorded yet.' );
+			return;
+		}
+		\WP_CLI\Utils\format_items( $format, $rows, array_keys( $rows[0] ) );
+	}
+
+	/**
 	 * Print the current preload status as a table.
 	 */
 	private function print_preload_status() {
