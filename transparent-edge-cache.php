@@ -119,23 +119,18 @@ function flavor_edge_init() {
 	$stored_version = get_option( 'flavor_edge_version', '0' );
 	if ( $stored_version !== FLAVOR_EDGE_VERSION ) {
 		update_option( 'flavor_edge_version', FLAVOR_EDGE_VERSION );
+		// Minify output: do NOT delete it on a plugin update. Every bundle and
+		// per-asset file name already includes FLAVOR_EDGE_VERSION, so the new
+		// version renders new names on its own; deleting the old files only makes
+		// the HTML the edge is still serving (which references them) 404 until it
+		// revalidates. Old files are reaped by the background GC after its grace.
 		if ( class_exists( 'flavor_edge\\TE_Minify' ) ) {
-			\flavor_edge\TE_Minify::clear_cache();
+			\flavor_edge\TE_Minify::schedule_gc();
 		}
 		// The object-cache.php drop-in is self-contained, so fixes shipped in this
 		// version do not reach an already-installed drop-in until it is rewritten.
 		if ( class_exists( 'flavor_edge\\TE_ObjectCache' ) ) {
 			\flavor_edge\TE_ObjectCache::maybe_upgrade_dropin();
-		}
-		// Clear minify dir directly as fallback.
-		$cache_dir = WP_CONTENT_DIR . '/cache/flavor-edge/min';
-		if ( is_dir( $cache_dir ) ) {
-			$files = glob( $cache_dir . '/*.{css,js}', GLOB_BRACE );
-			if ( $files ) {
-				foreach ( $files as $f ) {
-					@unlink( $f );
-				}
-			}
 		}
 	}
 
