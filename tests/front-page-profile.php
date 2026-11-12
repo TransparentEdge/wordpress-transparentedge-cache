@@ -23,9 +23,11 @@ define( 'ABSPATH', __DIR__ );
 // ---------------------------------------------------------------------------
 $GLOBALS['__is_front_page'] = false;
 $GLOBALS['__is_home']       = false;
+$GLOBALS['__is_404']        = false;
 
 function is_front_page() { return (bool) $GLOBALS['__is_front_page']; }
 function is_home() { return (bool) $GLOBALS['__is_home']; }
+function is_404() { return (bool) $GLOBALS['__is_404']; }
 function apply_filters( $tag, $value ) { return $value; }
 
 /** Minimal stub so the class can be loaded in isolation. */
@@ -93,6 +95,15 @@ $GLOBALS['__is_front_page'] = false;
 $GLOBALS['__is_home']       = false;
 $p = call_private( 'resolve_cache_profile', $s );
 check( 'override on + not home → global s-maxage 172800', 172800 === $p['s_maxage'] );
+
+// 4. 404 → short profile (60s edge/browser, swr 30), keeps the configured sie.
+$GLOBALS['__is_404'] = true;
+$p = call_private( 'resolve_cache_profile', $base );
+check( '404 → s-maxage 60', 60 === $p['s_maxage'] );
+check( '404 → max-age 60', 60 === $p['max_age'] );
+check( '404 → swr 30', 30 === $p['swr'] );
+check( '404 → keeps sie 86400', 86400 === $p['sie'] );
+$GLOBALS['__is_404'] = false;
 
 echo "== get_safe_vary ==\n";
 

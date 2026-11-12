@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.12.1
+ * Version:           1.13.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.12.1' );
+define( 'FLAVOR_EDGE_VERSION', '1.13.0' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -132,6 +132,16 @@ function flavor_edge_init() {
 		if ( class_exists( 'flavor_edge\\TE_ObjectCache' ) ) {
 			\flavor_edge\TE_ObjectCache::maybe_upgrade_dropin();
 		}
+		// 1.13.0 changes the surrogate-key model (listing pages now carry lst-*
+		// keys). Pages cached by an earlier version do not have them, so one soft
+		// purge lets them pick the new keys up instead of waiting for their TTL.
+		// Soft (served stale while revalidating) and edge-only on purpose: the
+		// origin page cache is URL-based, unaffected, and stays warm to absorb the
+		// revalidations. Runs from WP-Cron so it never delays a visitor's request.
+		if ( '0' !== $stored_version && version_compare( $stored_version, '1.13.0', '<' )
+			&& ! wp_next_scheduled( 'flavor_edge_upgrade_purge' ) ) {
+			wp_schedule_single_event( time() + 30, 'flavor_edge_upgrade_purge' );
+		}
 	}
 
 	// One-time cache-fragmentation migration (Vary: X-Device / Accept-Language).
@@ -149,6 +159,20 @@ function flavor_edge_init() {
 	}
 }
 add_action( 'plugins_loaded', 'flavor_edge_init' );
+
+/**
+ * One-time soft purge after upgrading from a version older than 1.13.0
+ * (scheduled from flavor_edge_init). Edge only: see the comment there.
+ */
+function flavor_edge_upgrade_purge() {
+	if ( ! \flavor_edge\TE_Settings::is_connected() ) {
+		return;
+	}
+	\flavor_edge\TE_Api::set_context( 'upgrade to 1.13.0: new cache keys' );
+	\flavor_edge\TE_Api::purge_all();
+	\flavor_edge\TE_Api::set_context( '' );
+}
+add_action( 'flavor_edge_upgrade_purge', 'flavor_edge_upgrade_purge' );
 
 /**
  * One-time migration: turn OFF Vary: X-Device and Vary: Accept-Language on
@@ -384,6 +408,7 @@ function flavor_edge_deactivate( $network_wide = false ) {
  */
 function flavor_edge_deactivate_single() {
 	wp_clear_scheduled_hook( 'flavor_edge_flush_queue' );
+	wp_clear_scheduled_hook( 'flavor_edge_upgrade_purge' );
 	wp_clear_scheduled_hook( 'flavor_edge_preload_batch' );
 	wp_clear_scheduled_hook( 'flavor_edge_warmup_process' );
 	wp_clear_scheduled_hook( \flavor_edge\TE_Api::HEALTH_CRON_HOOK );

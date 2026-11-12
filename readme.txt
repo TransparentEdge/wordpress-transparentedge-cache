@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.12.1
+Stable tag: 1.13.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -114,6 +114,17 @@ The plugin registers a `wp te-cache` command for operations and deploy pipelines
 Soft purge is the default; add `--hard` to force an immediate purge. The commands are thin wrappers over the same hardened purge/preload APIs the plugin uses internally.
 
 == Changelog ==
+
+= 1.13.0 =
+Invalidation precision, observability and object-cache resilience.
+* Invalidation (cache keys): listing pages and individual posts now carry distinct keys. Publishing or updating a post refreshes that post, the home page, feeds, date archives and the listing pages it appears in (its categories, tags, author and post-type archive) — other posts that merely share a category or tag are no longer revalidated. Only viewable taxonomies generate keys. Listing pages also carry the key of each post they show (filter flavor_edge_listing_post_keys_max, default 100), so editing a post refreshes every listing it appears on.
+* New option (TE Cache → Invalidation, off by default): "Also refresh every post of the same type when one is published", for themes that show a "latest" block inside each post.
+* After updating to 1.13.0 the plugin runs one soft purge of the site (edge only, from WP-Cron) so pages cached by earlier versions pick up the new keys. Stale content keeps being served while it revalidates, and the origin page cache stays warm to absorb it.
+* Purge history: TE Cache → History now lists the latest purges — what triggered each one (publish, comment, menu, plugin change, dashboard, admin bar, WP-CLI…), what was purged, the result and the user. Also available as wp te-cache log (--limit, --format). Stored in a single non-autoloaded option, written once per request (filters flavor_edge_purge_log_enabled, flavor_edge_purge_log_size).
+* 404 responses get a short edge lifetime (60 s by default; filter flavor_edge_404_cache_profile).
+* Object cache (Redis): a Redis error or timeout no longer interrupts the page — the request continues on the in-memory cache and logs one line. Connect and per-command timeouts default to 1 s (WP_REDIS_TIMEOUT, WP_REDIS_READ_TIMEOUT). Batched writes (wp_cache_add_multiple / set_multiple) use one round-trip. The origin page cache's Redis backend gets the same guards.
+* Object cache: "Disable" now also turns off automatic installation, so the drop-in is not reinstalled on the next admin page load.
+* Minify: a plugin update no longer deletes minified files; old files are reaped by the background cleanup after its grace window.
 
 = 1.12.1 =
 Maintenance release — correctness and robustness fixes, no new features.
