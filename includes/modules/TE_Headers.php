@@ -304,6 +304,23 @@ class TE_Headers {
 			);
 		}
 
+		// A 404 must not ride the long HTML TTL: a URL that 404s now may be published
+		// (or republished) a minute later, and bot floods of missing URLs should not
+		// sit in the cache for days. Short edge/browser life; stale-if-error kept so
+		// an origin error still serves the last copy. Filterable.
+		if ( is_404() ) {
+			$profile = (array) apply_filters(
+				'flavor_edge_404_cache_profile',
+				array(
+					'max_age'  => 60,
+					's_maxage' => 60,
+					'swr'      => 30,
+					'sie'      => (int) $profile['sie'],
+				),
+				$settings
+			);
+		}
+
 		/**
 		 * Filter the resolved Cache-Control profile before it is emitted.
 		 *
