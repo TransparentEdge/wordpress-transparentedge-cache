@@ -297,7 +297,9 @@ class TE_WooCommerce {
 		$cat_ids = $product->get_category_ids();
 		foreach ( $cat_ids as $cat_id ) {
 			$tags[] = 'woo-cat-' . $cat_id;
-			$tags[] = 'term-' . $cat_id;
+			// Listing key (the category pages). term-<id> would also hit every
+			// other product of the category, which carries it as a membership key.
+			$tags[] = 'lst-term-' . $cat_id;
 
 			$link = get_term_link( $cat_id, 'product_cat' );
 			if ( ! is_wp_error( $link ) ) {
@@ -309,7 +311,7 @@ class TE_WooCommerce {
 		$tag_ids = $product->get_tag_ids();
 		foreach ( $tag_ids as $tag_id ) {
 			$tags[] = 'woo-tag-' . $tag_id;
-			$tags[] = 'term-' . $tag_id;
+			$tags[] = 'lst-term-' . $tag_id;
 
 			$link = get_term_link( $tag_id, 'product_tag' );
 			if ( ! is_wp_error( $link ) ) {

@@ -616,12 +616,25 @@ class TE_PageCache {
 				if ( ! is_wp_error( $link ) ) {
 					$urls[] = $link;
 				}
-			} elseif ( preg_match( '/^author-(\d+)$/', $tag, $m ) ) {
+			} elseif ( preg_match( '/^lst-term-(\d+)$/', $tag, $m ) ) {
+				// Listing key (v2): the term archive that lists the published post.
+				$link = get_term_link( (int) $m[1] );
+				if ( ! is_wp_error( $link ) ) {
+					$urls[] = $link;
+				}
+			} elseif ( preg_match( '/^(?:lst-)?author-(\d+)$/', $tag, $m ) ) {
 				$urls[] = get_author_posts_url( (int) $m[1] );
-			} elseif ( preg_match( '/^type-(.+)$/', $tag, $m ) ) {
+			} elseif ( preg_match( '/^(?:lst-)?type-(.+)$/', $tag, $m ) ) {
 				$archive = get_post_type_archive_link( $m[1] );
 				if ( $archive ) {
 					$urls[] = $archive;
+				}
+				// The posts page (blog index) lists 'post' when it is not the home.
+				if ( 'post' === $m[1] ) {
+					$blog_page_id = (int) get_option( 'page_for_posts' );
+					if ( $blog_page_id ) {
+						$urls[] = get_permalink( $blog_page_id );
+					}
 				}
 			}
 		}

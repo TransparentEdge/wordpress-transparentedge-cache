@@ -41,6 +41,27 @@ class TE_Headers {
 	}
 
 	/**
+	 * Public (viewable) taxonomies of a post type — the only ones whose terms take
+	 * part in surrogate keys. Non-viewable taxonomies are internal bookkeeping (WPML
+	 * translation_priority, editorial flags, …): they are not shown to readers and
+	 * are often attached to every object, so keying on them would tie unrelated
+	 * pages together. Shared by the headers (emit) and invalidation (purge) sides
+	 * so both always agree. Filterable via flavor_edge_surrogate_taxonomies.
+	 *
+	 * @param string $post_type Post type.
+	 * @return string[] Taxonomy names.
+	 */
+	public static function viewable_taxonomies( $post_type ) {
+		$out = array();
+		foreach ( get_object_taxonomies( $post_type ) as $taxonomy ) {
+			if ( function_exists( 'is_taxonomy_viewable' ) ? is_taxonomy_viewable( $taxonomy ) : true ) {
+				$out[] = $taxonomy;
+			}
+		}
+		return (array) apply_filters( 'flavor_edge_surrogate_taxonomies', $out, $post_type );
+	}
+
+	/**
 	 * Collect Surrogate-Keys based on the current WordPress query.
 	 */
 	public static function collect_surrogate_keys() {
@@ -50,28 +71,48 @@ class TE_Headers {
 
 		$keys = array();
 
+		// Key model (v2). Two kinds of keys, kept strictly apart:
+		//  - MEMBERSHIP keys say what a page DISPLAYS: post-<id>, term-<id> (a term's
+		//    name/description), author-<id> (a byline). They are purged when that
+		//    ENTITY itself changes (the post is edited, a term is renamed…).
+		//  - LISTING keys say what a page LISTS: front-page, lst-type-<type>,
+		//    lst-term-<id>, lst-author-<id>, archive-date, feed. They are purged when
+		//    a post is published/updated, so the pages that list it refresh.
+		// Publishing post P purges post-<P> plus the LISTING keys of P's type, author
+		// and terms — never another post's membership keys. Before v2 singles also
+		// carried type-/tax-/term-/author- and those same tags were purged on every
+		// publish, so one publish invalidated every page sharing any of them, which
+		// in practice was the whole site.
+
 		// Global key for full purge.
 		$keys[] = 'site-' . get_current_blog_id();
 
 		if ( is_front_page() || is_home() ) {
 			$keys[] = 'front-page';
 		}
+		if ( is_home() ) {
+			// The posts page lists the latest posts.
+			$keys[] = 'lst-type-post';
+		}
 
 		if ( is_singular() ) {
 			$post = get_queried_object();
 			if ( $post ) {
 				$keys[] = 'post-' . $post->ID;
+				// Membership only: purged on publish ONLY when the site opts into
+				// refreshing every single of the type (themes whose singles show a
+				// "latest news" block). See the publish_refresh_singles setting.
 				$keys[] = 'type-' . $post->post_type;
 				$keys[] = 'author-' . $post->post_author;
 
-				// Taxonomy terms.
-				$taxonomies = get_object_taxonomies( $post->post_type );
-				foreach ( $taxonomies as $taxonomy ) {
+				// Terms the post displays — public (viewable) taxonomies only. Internal
+				// taxonomies (e.g. WPML's translation_priority, present on every page)
+				// would otherwise tie unrelated pages together.
+				foreach ( self::viewable_taxonomies( $post->post_type ) as $taxonomy ) {
 					$terms = get_the_terms( $post->ID, $taxonomy );
 					if ( $terms && ! is_wp_error( $terms ) ) {
 						foreach ( $terms as $term ) {
 							$keys[] = 'term-' . $term->term_id;
-							$keys[] = 'tax-' . $taxonomy;
 						}
 					}
 				}
@@ -80,28 +121,43 @@ class TE_Headers {
 
 		if ( is_category() || is_tag() || is_tax() ) {
 			$term = get_queried_object();
-			if ( $term ) {
-				$keys[] = 'term-' . $term->term_id;
-				$keys[] = 'tax-' . $term->taxonomy;
+			if ( $term && isset( $term->term_id ) ) {
+				$keys[] = 'term-' . $term->term_id;     // shows the term's name/description.
+				$keys[] = 'lst-term-' . $term->term_id; // lists the term's posts.
 			}
-			// Also add keys for each post in the listing.
-			if ( have_posts() ) {
-				global $wp_query;
-				foreach ( $wp_query->posts as $post ) {
-					$keys[] = 'post-' . $post->ID;
+		}
+
+		if ( is_post_type_archive() ) {
+			foreach ( (array) get_query_var( 'post_type' ) as $post_type ) {
+				if ( is_string( $post_type ) && '' !== $post_type ) {
+					$keys[] = 'lst-type-' . $post_type;
 				}
 			}
 		}
 
 		if ( is_author() ) {
 			$author = get_queried_object();
-			if ( $author ) {
+			if ( $author && isset( $author->ID ) ) {
 				$keys[] = 'author-' . $author->ID;
+				$keys[] = 'lst-author-' . $author->ID;
 			}
 		}
 
 		if ( is_date() ) {
 			$keys[] = 'archive-date';
+		}
+
+		// Every listing (home, archives, search, feeds) also carries post-<id> of the
+		// posts it shows, so editing one of them refreshes the listings that show it.
+		// Capped to keep the header small on long listings.
+		if ( ! is_singular() && have_posts() ) {
+			global $wp_query;
+			$max = (int) apply_filters( 'flavor_edge_listing_post_keys_max', 100 );
+			foreach ( array_slice( (array) $wp_query->posts, 0, max( 0, $max ) ) as $listed ) {
+				if ( isset( $listed->ID ) ) {
+					$keys[] = 'post-' . $listed->ID;
+				}
+			}
 		}
 
 		if ( is_search() ) {

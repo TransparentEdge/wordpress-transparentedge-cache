@@ -599,7 +599,13 @@ defined( 'ABSPATH' ) || exit;
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Posts & Pages', 'flavor-edge-cache' ); ?></th>
-					<td><label><input type="checkbox" name="purge_on_post" value="1" <?php checked( $settings['purge_on_post'] ); ?> /> <?php esc_html_e( 'Purge when a post, page, or CPT is published, updated, or deleted', 'flavor-edge-cache' ); ?></label></td>
+					<td><label><input type="checkbox" name="purge_on_post" value="1" <?php checked( $settings['purge_on_post'] ); ?> /> <?php esc_html_e( 'Purge when a post, page, or CPT is published, updated, or deleted', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Publishing refreshes the post itself and the pages that list it: home, its sections and tags, its author page and feeds. Other posts are not touched.', 'flavor-edge-cache' ); ?></p></td>
+				</tr>
+				<tr>
+					<th><?php esc_html_e( '"Latest" blocks in posts', 'flavor-edge-cache' ); ?></th>
+					<td><label><input type="checkbox" name="publish_refresh_singles" value="1" <?php checked( ! empty( $settings['publish_refresh_singles'] ) ); ?> /> <?php esc_html_e( 'Also refresh every post of the same type when one is published', 'flavor-edge-cache' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Only if your theme shows a "latest news" or similar block inside each post and it must update right away. On a large site this revalidates every post on each publish, which adds origin load — leave it off unless you need it.', 'flavor-edge-cache' ); ?></p></td>
 				</tr>
 				<tr>
 					<th><?php esc_html_e( 'Comments', 'flavor-edge-cache' ); ?></th>

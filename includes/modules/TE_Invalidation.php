@@ -320,8 +320,11 @@ class TE_Invalidation {
 	 * @param string $taxonomy Taxonomy slug.
 	 */
 	public static function on_term_edit( $term_id, $tt_id, $taxonomy ) {
+		// The pages that display the term (singles carrying term-<id>, its archive)
+		// and its own listing. Not tax-<taxonomy>: every single with any term of the
+		// taxonomy carried it, so editing one tag invalidated the whole site.
 		self::$pending_tags[] = 'term-' . $term_id;
-		self::$pending_tags[] = 'tax-' . $taxonomy;
+		self::$pending_tags[] = 'lst-term-' . $term_id;
 
 		// Warm the term archive page.
 		$term_link = get_term_link( (int) $term_id, $taxonomy );
@@ -339,8 +342,9 @@ class TE_Invalidation {
 	 * @param mixed  $deleted_term Deleted term object.
 	 */
 	public static function on_term_delete( $term_id, $tt_id, $taxonomy, $deleted_term ) {
+		// See on_term_edit(): term-<id> covers every page that showed the term.
 		self::$pending_tags[] = 'term-' . $term_id;
-		self::$pending_tags[] = 'tax-' . $taxonomy;
+		self::$pending_tags[] = 'lst-term-' . $term_id;
 		self::$pending_tags[] = 'front-page';
 
 		self::$warmup_urls[] = home_url( '/' );
@@ -371,7 +375,9 @@ class TE_Invalidation {
 			$terms = get_the_terms( $product_id, 'product_cat' );
 			if ( $terms && ! is_wp_error( $terms ) ) {
 				foreach ( $terms as $term ) {
-					self::$pending_tags[] = 'term-' . $term->term_id;
+					// Listing key: the category pages that list the product. term-<id>
+					// would also hit every other product of the category.
+					self::$pending_tags[] = 'lst-term-' . $term->term_id;
 					$link = get_term_link( $term );
 					if ( ! is_wp_error( $link ) ) {
 						self::$warmup_urls[] = $link;
@@ -425,31 +431,35 @@ class TE_Invalidation {
 		// strong origin can opt back into proactive broad-page warming via the filter.
 		$warm_broad = (bool) apply_filters( 'flavor_edge_warm_broad_pages', false, $post_id, $post );
 
-		// The post itself.
+		// Key model v2 (see TE_Headers::collect_surrogate_keys): purge the post's own
+		// MEMBERSHIP key plus the LISTING keys of the pages that may now show it or
+		// stop showing it. Never another page's membership keys (type-/term-/author-,
+		// which every single of the same type/term/author carries) and never tax-:
+		// those turned one publish into an invalidation of the whole site.
+		$is_page = ( 'page' === $post->post_type );
+
+		// The post itself — and, through post-<id>, every listing that shows it.
 		self::$pending_tags[] = 'post-' . $post_id;
 
-		// Post type archive.
-		self::$pending_tags[] = 'type-' . $post->post_type;
-
-		// Author page.
-		self::$pending_tags[] = 'author-' . $post->post_author;
-
-		// Front page / blog page.
+		// Front page (home / latest). Kept for every type: a home can feature any type.
 		self::$pending_tags[] = 'front-page';
 
-		// Feeds.
-		self::$pending_tags[] = 'feed';
+		if ( ! $is_page ) {
+			self::$pending_tags[] = 'feed';
+			self::$pending_tags[] = 'archive-date';
+			self::$pending_tags[] = 'lst-type-' . $post->post_type;
+			self::$pending_tags[] = 'lst-author-' . $post->post_author;
+		}
 
-		// Taxonomy terms.
-		$taxonomies = get_object_taxonomies( $post->post_type );
-		foreach ( $taxonomies as $taxonomy ) {
+		// Term archives listing the post (public taxonomies only).
+		foreach ( TE_Headers::viewable_taxonomies( $post->post_type ) as $taxonomy ) {
 			$terms = get_the_terms( $post_id, $taxonomy );
 			if ( $terms && ! is_wp_error( $terms ) ) {
 				foreach ( $terms as $term ) {
-					self::$pending_tags[] = 'term-' . $term->term_id;
+					self::$pending_tags[] = 'lst-term-' . $term->term_id;
 
 					// Term archive URL — broad page, warmed only when opted in
-					// (otherwise evicted by the term-* tag above and served by grace).
+					// (otherwise evicted by the lst-term-* tag above and served by grace).
 					if ( $warm_broad ) {
 						$term_link = get_term_link( $term );
 						if ( ! is_wp_error( $term_link ) ) {
@@ -457,8 +467,14 @@ class TE_Invalidation {
 						}
 					}
 				}
-				self::$pending_tags[] = 'tax-' . $taxonomy;
 			}
+		}
+
+		// Opt-in: themes whose singles render a "latest posts" block need every single
+		// of the type refreshed on each publish. That is the old broad behaviour, but
+		// scoped to one type (no cross-type, author, term or internal-taxonomy fan-out).
+		if ( ! $is_page && TE_Settings::get( 'publish_refresh_singles' ) ) {
+			self::$pending_tags[] = 'type-' . $post->post_type;
 		}
 
 		// Collect warm-up URLs.
@@ -467,7 +483,16 @@ class TE_Invalidation {
 		// to a 404/non-public page, and warming it after the purge would cache a fresh
 		// 404 at the edge. The home page and archives below are still warmed.
 		if ( $warm_self ) {
-			self::$warmup_urls[] = get_permalink( $post_id );
+			$permalink = get_permalink( $post_id );
+			self::$warmup_urls[] = $permalink;
+
+			// With refetch off there is no warm-up, so also evict the permalink by URL.
+			// A 404 cached while the post was unpublished is a 404 page: it carries no
+			// post-<id> key, so the tag purge alone would leave it in place (up to the
+			// HTML TTL) after the post is published again.
+			if ( $permalink && ! TE_Settings::get( 'refetch_enabled' ) ) {
+				self::$pending_urls[] = $permalink;
+			}
 		}
 
 		// Broad, expensive-to-regenerate shared pages (home, type/blog/author
