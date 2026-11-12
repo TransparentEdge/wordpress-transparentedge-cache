@@ -229,7 +229,15 @@ class TE_PageCache_Store {
 		switch ( $this->backend ) {
 			case 'redis':
 				$r = $this->redis();
-				return $r ? ( false !== $r->del( $this->rkey( $key ) ) ) : false;
+				if ( ! $r ) {
+					return false;
+				}
+				try {
+					return false !== $r->del( $this->rkey( $key ) );
+				} catch ( \Throwable $e ) {
+					$this->redis_down();
+					return false;
+				}
 			case 'memcached':
 				$m = $this->memcached();
 				// Must match the generation-scoped key used by get/set (mkey), not
@@ -441,27 +449,39 @@ class TE_PageCache_Store {
 				} elseif ( defined( 'WP_REDIS_TLS_OPTIONS' ) && is_array( WP_REDIS_TLS_OPTIONS ) ) {
 					$ssl = array_merge( $ssl, WP_REDIS_TLS_OPTIONS );
 				}
-				$ok = @$r->connect( 'tls://' . $host, $port, 1.0, null, 0, 0, array( 'stream' => $ssl ) );
+				$ok = @$r->connect( 'tls://' . $host, $port, 1.0, null, 0, 1.0, array( 'stream' => $ssl ) );
 			} else {
-				$ok = @$r->connect( $host, $port, 1 );
+				$ok = @$r->connect( $host, $port, 1.0, null, 0, 1.0 );
 			}
 			if ( ! $ok ) {
 				return null;
 			}
+			// Per-command read timeout: a hung Redis must cost a request at most
+			// ~1s and then fall through to WordPress, never block the worker for
+			// default_socket_timeout (60s).
+			$r->setOption( \Redis::OPT_READ_TIMEOUT, 1.0 );
 			$pass = defined( 'FLAVOR_EDGE_PC_REDIS_PASSWORD' ) ? FLAVOR_EDGE_PC_REDIS_PASSWORD : ( defined( 'WP_REDIS_PASSWORD' ) ? WP_REDIS_PASSWORD : '' );
-			if ( $pass ) {
-				$r->auth( $pass );
+			if ( $pass && ! $r->auth( $pass ) ) {
+				return null;
 			}
-			if ( defined( 'FLAVOR_EDGE_PC_REDIS_DB' ) ) {
-				$r->select( (int) FLAVOR_EDGE_PC_REDIS_DB ); // dedicated DB → immune to a foreign FLUSHDB on DB 0.
-			} elseif ( defined( 'WP_REDIS_DATABASE' ) ) {
-				$r->select( (int) WP_REDIS_DATABASE );
+			$db = defined( 'FLAVOR_EDGE_PC_REDIS_DB' ) ? (int) FLAVOR_EDGE_PC_REDIS_DB // dedicated DB → immune to a foreign FLUSHDB on DB 0.
+				: ( defined( 'WP_REDIS_DATABASE' ) ? (int) WP_REDIS_DATABASE : null );
+			if ( null !== $db && ! $r->select( $db ) ) {
+				return null;
 			}
 			$this->conn = $r;
 		} catch ( \Throwable $e ) {
 			$this->conn = null;
 		}
 		return $this->conn;
+	}
+
+	/**
+	 * Redis failed mid-request: stop using it for the rest of this request.
+	 * The page is then served by WordPress as if the shield were empty.
+	 */
+	private function redis_down() {
+		$this->conn = null;
 	}
 
 	private function rkey( $key ) {
@@ -473,7 +493,12 @@ class TE_PageCache_Store {
 		if ( ! $r ) {
 			return null;
 		}
-		$raw = $r->get( $this->rkey( $key ) );
+		try {
+			$raw = $r->get( $this->rkey( $key ) );
+		} catch ( \Throwable $e ) {
+			$this->redis_down();
+			return null;
+		}
 		if ( false === $raw ) {
 			return null;
 		}
@@ -490,7 +515,12 @@ class TE_PageCache_Store {
 			return false;
 		}
 		// Native TTL → expiry is automatic, no stale sweep needed.
-		return (bool) $r->setex( $this->rkey( $key ), $this->ttl, serialize( $entry ) );
+		try {
+			return (bool) $r->setex( $this->rkey( $key ), $this->ttl, serialize( $entry ) );
+		} catch ( \Throwable $e ) {
+			$this->redis_down();
+			return false;
+		}
 	}
 
 	private function redis_flush() {
@@ -499,13 +529,18 @@ class TE_PageCache_Store {
 			return false;
 		}
 		// Prefix-scoped delete so we never touch another app's keys in the DB.
-		$it = null;
-		do {
-			$keys = $r->scan( $it, $this->prefix . '*', 500 );
-			if ( is_array( $keys ) && $keys ) {
-				$r->del( $keys );
-			}
-		} while ( $it > 0 );
+		try {
+			$it = null;
+			do {
+				$keys = $r->scan( $it, $this->prefix . '*', 500 );
+				if ( is_array( $keys ) && $keys ) {
+					$r->del( $keys );
+				}
+			} while ( $it > 0 );
+		} catch ( \Throwable $e ) {
+			$this->redis_down();
+			return false;
+		}
 		return true;
 	}
 

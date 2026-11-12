@@ -675,6 +675,12 @@ class TE_ObjectCache {
 		if ( ! current_user_can( 'manage_options' ) ) { wp_send_json_error( 'Unauthorized' ); }
 
 		$result = self::remove_dropin();
+		// An explicit "Disable" must stick: without this the auto-install would put
+		// the drop-in back on the next admin load whenever a live backend exists.
+		if ( ! empty( $result['success'] ) && TE_Settings::get( 'object_cache_auto', true ) ) {
+			TE_Settings::set( 'object_cache_auto', false );
+			$result['message'] .= ' ' . __( 'Automatic installation has been turned off; re-enable it under Object Cache settings.', 'flavor-edge-cache' );
+		}
 		wp_send_json( $result );
 	}
 
@@ -743,6 +749,11 @@ class TE_ObjectCache {
  *   WP_REDIS_PREFIX   (default: site blog_id)
  *   WP_REDIS_SCHEME   ('tls' or 'rediss' to enable TLS; or WP_REDIS_TLS = true)
  *   WP_REDIS_TLS_OPTIONS (array; SSL stream-context opts, e.g. cafile / verify_peer)
+ *   WP_REDIS_TIMEOUT      (connect timeout, seconds; default 1)
+ *   WP_REDIS_READ_TIMEOUT (per-command timeout, seconds; default 1)
+ *
+ * A Redis outage never breaks the page: on any error the cache continues
+ * in memory for the rest of the request (one error_log line).
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -813,11 +824,7 @@ function wp_cache_delete_multiple( $keys, $group = 'default' ) {
 }
 function wp_cache_add_multiple( array $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
-	$r = array();
-	foreach ( $data as $key => $value ) {
-		$r[ $key ] = $wp_object_cache->add( $key, $value, $group, $expire );
-	}
-	return $r;
+	return $wp_object_cache->add_multiple( $data, $group, $expire );
 }
 function wp_cache_flush_runtime() {
 	global $wp_object_cache;
@@ -835,6 +842,7 @@ class WP_Object_Cache_Redis {
 	private $blog_prefix = '';
 	private $global_prefix = '';
 	private $salt = '';
+	private $logged = false;
 	public $cache_hits   = 0;
 	public $cache_misses = 0;
 
@@ -848,11 +856,15 @@ class WP_Object_Cache_Redis {
 	private function connect() {
 		if ( ! class_exists( 'Redis' ) ) { return; }
 		try {
-			$this->redis = new Redis();
+			$r = new Redis();
 			$host = defined( 'WP_REDIS_HOST' ) ? WP_REDIS_HOST : '127.0.0.1';
 			$port = defined( 'WP_REDIS_PORT' ) ? WP_REDIS_PORT : 6379;
 			$scheme = defined( 'WP_REDIS_SCHEME' ) ? strtolower( (string) WP_REDIS_SCHEME ) : '';
 			$tls = ( 'tls' === $scheme || 'rediss' === $scheme || ( defined( 'WP_REDIS_TLS' ) && WP_REDIS_TLS ) );
+			// Short timeouts: a slow or hung Redis must never hold a PHP worker for the
+			// default_socket_timeout (60s). Connect and per-command read timeouts.
+			$timeout      = defined( 'WP_REDIS_TIMEOUT' ) ? (float) WP_REDIS_TIMEOUT : 1.0;
+			$read_timeout = defined( 'WP_REDIS_READ_TIMEOUT' ) ? (float) WP_REDIS_READ_TIMEOUT : 1.0;
 			// R6: persistent connection reused per PHP-FPM worker (pconnect).
 			$pid = 'fe_' . substr( md5( $host . ':' . $port . ':' . ( defined( 'WP_REDIS_DATABASE' ) ? WP_REDIS_DATABASE : 0 ) ), 0, 12 );
 			if ( $tls ) {
@@ -860,19 +872,39 @@ class WP_Object_Cache_Redis {
 				if ( defined( 'WP_REDIS_TLS_OPTIONS' ) && is_array( WP_REDIS_TLS_OPTIONS ) ) {
 					$ssl = array_merge( $ssl, WP_REDIS_TLS_OPTIONS );
 				}
-				$this->redis->pconnect( 'tls://' . $host, (int) $port, 1.0, $pid, 0, 0, array( 'stream' => $ssl ) );
+				$ok = $r->pconnect( 'tls://' . $host, (int) $port, $timeout, $pid, 0, $read_timeout, array( 'stream' => $ssl ) );
 			} else {
-				$this->redis->pconnect( $host, (int) $port, 1.0, $pid );
+				$ok = $r->pconnect( $host, (int) $port, $timeout, $pid, 0, $read_timeout );
 			}
+			if ( ! $ok ) { return; }
+			$r->setOption( Redis::OPT_READ_TIMEOUT, $read_timeout );
 			if ( defined( 'WP_REDIS_PASSWORD' ) && WP_REDIS_PASSWORD ) {
-				$this->redis->auth( WP_REDIS_PASSWORD );
+				if ( ! $r->auth( WP_REDIS_PASSWORD ) ) { return; }
 			}
-			if ( defined( 'WP_REDIS_DATABASE' ) ) {
-				$this->redis->select( (int) WP_REDIS_DATABASE );
+			if ( defined( 'WP_REDIS_DATABASE' ) && (int) WP_REDIS_DATABASE !== (int) $r->getDbNum() ) {
+				if ( ! $r->select( (int) WP_REDIS_DATABASE ) ) { return; }
 			}
+			$this->redis = $r;
 		} catch ( Exception $e ) {
 			$this->redis = null;
 		}
+	}
+
+	/**
+	 * Redis failed mid-request (connection lost, timeout…): stop using it for the
+	 * rest of this request and continue on the in-memory cache only. A cache
+	 * outage must degrade to "no persistent cache", never to a fatal error.
+	 */
+	private function fail( $e = null ) {
+		$this->redis = null;
+		if ( ! $this->logged ) {
+			$this->logged = true;
+			error_log( '[Flavor Edge Cache] Redis object cache unavailable, continuing without it for this request: ' . ( $e ? $e->getMessage() : 'error' ) ); // phpcs:ignore
+		}
+	}
+
+	private function persistent( $group ) {
+		return $this->redis && ! in_array( $group, $this->non_persistent, true );
 	}
 
 	private function key( $key, $group ) {
@@ -880,19 +912,30 @@ class WP_Object_Cache_Redis {
 		return $this->salt . $prefix . $group . ':' . $key;
 	}
 
+	// Objects are stored and returned as copies, like core's WP_Object_Cache, so a
+	// caller mutating an object after set()/get() cannot alter the cached value.
+	private function copy( $v ) {
+		return is_object( $v ) ? clone $v : $v;
+	}
+
 	public function get( $key, $group = 'default', $force = false, &$found = null ) {
 		$k = $this->key( $key, $group );
-		if ( ! $force && isset( $this->cache[ $k ] ) ) {
+		if ( ! $force && array_key_exists( $k, $this->cache ) ) {
 			$found = true;
 			$this->cache_hits++;
-			return $this->cache[ $k ];
+			return $this->copy( $this->cache[ $k ] );
 		}
-		if ( in_array( $group, $this->non_persistent, true ) || ! $this->redis ) {
-			$found = isset( $this->cache[ $k ] );
+		if ( ! $this->persistent( $group ) ) {
+			$found = array_key_exists( $k, $this->cache );
 			$found ? $this->cache_hits++ : $this->cache_misses++;
-			return $found ? $this->cache[ $k ] : false;
+			return $found ? $this->copy( $this->cache[ $k ] ) : false;
 		}
-		$val = $this->redis->get( $k );
+		try {
+			$val = $this->redis->get( $k );
+		} catch ( Exception $e ) {
+			$this->fail( $e );
+			$val = false;
+		}
 		if ( false === $val ) {
 			$found = false;
 			$this->cache_misses++;
@@ -902,40 +945,62 @@ class WP_Object_Cache_Redis {
 		$this->cache_hits++;
 		$val = maybe_unserialize( $val );
 		$this->cache[ $k ] = $val;
-		return $val;
+		return $this->copy( $val );
 	}
 
 	public function set( $key, $data, $group = 'default', $expire = 0 ) {
 		$k = $this->key( $key, $group );
-		$this->cache[ $k ] = $data;
-		if ( in_array( $group, $this->non_persistent, true ) || ! $this->redis ) { return true; }
-		$val = maybe_serialize( $data );
-		if ( $expire > 0 ) {
-			return $this->redis->setex( $k, $expire, $val );
+		$this->cache[ $k ] = $this->copy( $data );
+		if ( ! $this->persistent( $group ) ) { return true; }
+		try {
+			$val = maybe_serialize( $data );
+			return (bool) ( $expire > 0 ? $this->redis->setex( $k, (int) $expire, $val ) : $this->redis->set( $k, $val ) );
+		} catch ( Exception $e ) {
+			$this->fail( $e );
+			return false;
 		}
-		return $this->redis->set( $k, $val );
+	}
+
+	// add/replace are single atomic commands (SET NX / SET XX): one round-trip and
+	// race-free, so wp_cache_add() works as a mutex across requests.
+	private function set_conditional( $key, $data, $group, $expire, $flag ) {
+		$k = $this->key( $key, $group );
+		if ( ! $this->persistent( $group ) ) {
+			$exists = array_key_exists( $k, $this->cache );
+			if ( ( 'nx' === $flag && $exists ) || ( 'xx' === $flag && ! $exists ) ) { return false; }
+			$this->cache[ $k ] = $this->copy( $data );
+			return true;
+		}
+		$opts = array( $flag );
+		if ( $expire > 0 ) { $opts['ex'] = (int) $expire; }
+		try {
+			$ok = (bool) $this->redis->set( $k, maybe_serialize( $data ), $opts );
+		} catch ( Exception $e ) {
+			$this->fail( $e );
+			return false;
+		}
+		if ( $ok ) { $this->cache[ $k ] = $this->copy( $data ); }
+		return $ok;
 	}
 
 	public function add( $key, $data, $group = 'default', $expire = 0 ) {
-		$k = $this->key( $key, $group );
-		if ( isset( $this->cache[ $k ] ) ) { return false; }
-		if ( $this->redis && ! in_array( $group, $this->non_persistent, true ) ) {
-			if ( $this->redis->exists( $k ) ) { return false; }
-		}
-		return $this->set( $key, $data, $group, $expire );
+		if ( array_key_exists( $this->key( $key, $group ), $this->cache ) ) { return false; }
+		return $this->set_conditional( $key, $data, $group, $expire, 'nx' );
 	}
 
 	public function replace( $key, $data, $group = 'default', $expire = 0 ) {
-		$k = $this->key( $key, $group );
-		if ( ! isset( $this->cache[ $k ] ) && $this->redis && ! $this->redis->exists( $k ) ) { return false; }
-		return $this->set( $key, $data, $group, $expire );
+		return $this->set_conditional( $key, $data, $group, $expire, 'xx' );
 	}
 
 	public function delete( $key, $group = 'default' ) {
 		$k = $this->key( $key, $group );
 		unset( $this->cache[ $k ] );
-		if ( $this->redis && ! in_array( $group, $this->non_persistent, true ) ) {
-			$this->redis->del( $k );
+		if ( $this->persistent( $group ) ) {
+			try {
+				$this->redis->del( $k );
+			} catch ( Exception $e ) {
+				$this->fail( $e );
+			}
 		}
 		return true;
 	}
@@ -945,10 +1010,10 @@ class WP_Object_Cache_Redis {
 		$need    = array(); // redis-key => original key, for the ones we must fetch.
 		foreach ( (array) $keys as $key ) {
 			$k = $this->key( $key, $group );
-			if ( ! $force && isset( $this->cache[ $k ] ) ) {
-				$results[ $key ] = $this->cache[ $k ];
+			if ( ! $force && array_key_exists( $k, $this->cache ) ) {
+				$results[ $key ] = $this->copy( $this->cache[ $k ] );
 				$this->cache_hits++;
-			} elseif ( in_array( $group, $this->non_persistent, true ) || ! $this->redis ) {
+			} elseif ( ! $this->persistent( $group ) ) {
 				$results[ $key ] = false;
 				$this->cache_misses++;
 			} else {
@@ -958,7 +1023,12 @@ class WP_Object_Cache_Redis {
 		if ( ! empty( $need ) ) {
 			// ONE round-trip (MGET) for every key not already in the runtime cache,
 			// instead of one GET per key via the core wp_cache_get_multiple() loop.
-			$vals = $this->redis->mget( array_keys( $need ) ); // positional, false for missing.
+			try {
+				$vals = $this->redis->mget( array_keys( $need ) ); // positional, false for missing.
+			} catch ( Exception $e ) {
+				$this->fail( $e );
+				$vals = array();
+			}
 			$i = 0;
 			foreach ( $need as $k => $orig ) {
 				$v = ( is_array( $vals ) && array_key_exists( $i, $vals ) ) ? $vals[ $i ] : false;
@@ -969,7 +1039,7 @@ class WP_Object_Cache_Redis {
 				} else {
 					$v = maybe_unserialize( $v );
 					$this->cache[ $k ]  = $v;
-					$results[ $orig ]   = $v;
+					$results[ $orig ]   = $this->copy( $v );
 					$this->cache_hits++;
 				}
 			}
@@ -982,18 +1052,77 @@ class WP_Object_Cache_Redis {
 		return $ordered;
 	}
 
-	public function set_multiple( $data, $group = 'default', $expire = 0 ) {
+	// Batched writes: one pipelined round-trip instead of one (or two) per key —
+	// core primes posts/meta through wp_cache_add_multiple() on cold renders.
+	private function write_multiple( $data, $group, $expire, $flag ) {
 		$r = array();
+		$send = array(); // original key => redis key
 		foreach ( (array) $data as $key => $value ) {
-			$r[ $key ] = $this->set( $key, $value, $group, $expire );
+			$k = $this->key( $key, $group );
+			if ( 'nx' === $flag && array_key_exists( $k, $this->cache ) ) {
+				$r[ $key ] = false;
+				continue;
+			}
+			if ( ! $this->persistent( $group ) ) {
+				$this->cache[ $k ] = $this->copy( $value );
+				$r[ $key ] = true;
+				continue;
+			}
+			$send[ $key ] = $k;
 		}
-		return $r;
+		if ( empty( $send ) ) { return $r; }
+		try {
+			$pipe = $this->redis->multi( Redis::PIPELINE );
+			foreach ( $send as $key => $k ) {
+				$val  = maybe_serialize( $data[ $key ] );
+				$opts = array();
+				if ( '' !== $flag ) { $opts[] = $flag; }
+				if ( $expire > 0 ) { $opts['ex'] = (int) $expire; }
+				$opts ? $pipe->set( $k, $val, $opts ) : $pipe->set( $k, $val );
+			}
+			$out = $pipe->exec();
+		} catch ( Exception $e ) {
+			$this->fail( $e );
+			$out = array();
+		}
+		$i = 0;
+		foreach ( $send as $key => $k ) {
+			$ok = is_array( $out ) && ! empty( $out[ $i ] );
+			$i++;
+			if ( $ok ) { $this->cache[ $k ] = $this->copy( $data[ $key ] ); }
+			$r[ $key ] = $ok;
+		}
+		// Same key order as the input, like core's per-key loop.
+		$ordered = array();
+		foreach ( (array) $data as $key => $unused ) {
+			$ordered[ $key ] = $r[ $key ];
+		}
+		return $ordered;
+	}
+
+	public function set_multiple( $data, $group = 'default', $expire = 0 ) {
+		return $this->write_multiple( $data, $group, $expire, '' );
+	}
+
+	public function add_multiple( $data, $group = 'default', $expire = 0 ) {
+		return $this->write_multiple( $data, $group, $expire, 'nx' );
 	}
 
 	public function delete_multiple( $keys, $group = 'default' ) {
-		$r = array();
+		$r    = array();
+		$send = array();
 		foreach ( (array) $keys as $key ) {
-			$r[ $key ] = $this->delete( $key, $group );
+			$k = $this->key( $key, $group );
+			unset( $this->cache[ $k ] );
+			$r[ $key ] = true;
+			$send[]    = $k;
+		}
+		if ( $send && $this->persistent( $group ) ) {
+			try {
+				$this->redis->del( $send ); // one round-trip for every key.
+			} catch ( Exception $e ) {
+				$this->fail( $e );
+			}
 		}
 		return $r;
 	}
@@ -1005,10 +1134,14 @@ class WP_Object_Cache_Redis {
 
 	public function incr( $key, $offset = 1, $group = 'default' ) {
 		$k = $this->key( $key, $group );
-		if ( $this->redis && ! in_array( $group, $this->non_persistent, true ) ) {
-			$val = $this->redis->incrBy( $k, $offset );
-			$this->cache[ $k ] = $val;
-			return $val;
+		if ( $this->persistent( $group ) ) {
+			try {
+				$val = $this->redis->incrBy( $k, $offset );
+				$this->cache[ $k ] = $val;
+				return $val;
+			} catch ( Exception $e ) {
+				$this->fail( $e );
+			}
 		}
 		$val = isset( $this->cache[ $k ] ) ? (int) $this->cache[ $k ] + $offset : $offset;
 		$this->cache[ $k ] = $val;
@@ -1022,19 +1155,36 @@ class WP_Object_Cache_Redis {
 	public function flush() {
 		$this->cache = array();
 		if ( $this->redis ) {
-				// Prefix-scoped delete; NEVER flushDb(), which wipes the whole DB
-				// (page-cache shield and any co-tenant, production included).
+			// Prefix-scoped delete; NEVER flushDb(), which wipes the whole DB
+			// (page-cache shield and any co-tenant, production included). UNLINK frees
+			// the memory asynchronously on the Redis side (falls back to DEL on a
+			// server without it).
+			try {
 				$it = null;
 				do {
 					$keys = $this->redis->scan( $it, $this->salt . '*', 500 );
-					if ( is_array( $keys ) && $keys ) { $this->redis->del( $keys ); }
+					if ( is_array( $keys ) && $keys ) {
+						if ( false === $this->redis->unlink( $keys ) ) {
+							$this->redis->del( $keys );
+						}
+					}
 				} while ( $it > 0 );
+			} catch ( Exception $e ) {
+				$this->fail( $e );
+				return false;
 			}
+		}
 		return true;
 	}
 
 	public function close() {
-		if ( $this->redis ) { $this->redis->close(); }
+		if ( $this->redis ) {
+			try {
+				$this->redis->close();
+			} catch ( Exception $e ) {
+				$this->redis = null;
+			}
+		}
 		return true;
 	}
 
