@@ -28,6 +28,8 @@ $GLOBALS['__is_404']        = false;
 function is_front_page() { return (bool) $GLOBALS['__is_front_page']; }
 function is_home() { return (bool) $GLOBALS['__is_home']; }
 function is_404() { return (bool) $GLOBALS['__is_404']; }
+$GLOBALS['__status'] = 200;
+function http_response_code() { return $GLOBALS['__status']; }
 function apply_filters( $tag, $value ) { return $value; }
 
 /** Minimal stub so the class can be loaded in isolation. */
@@ -104,6 +106,14 @@ check( '404 → max-age 60', 60 === $p['max_age'] );
 check( '404 → swr 30', 30 === $p['swr'] );
 check( '404 → keeps sie 86400', 86400 === $p['sie'] );
 $GLOBALS['__is_404'] = false;
+
+// 5. Other 4xx (e.g. 410 Gone set by a plugin) → same short profile; 200 untouched.
+$GLOBALS['__status'] = 410;
+$p = call_private( 'resolve_cache_profile', $base );
+check( '410 → s-maxage 60', 60 === $p['s_maxage'] && 60 === $p['max_age'] );
+$GLOBALS['__status'] = 200;
+$p = call_private( 'resolve_cache_profile', $base );
+check( '200 → page TTL again', 172800 === $p['s_maxage'] );
 
 echo "== get_safe_vary ==\n";
 

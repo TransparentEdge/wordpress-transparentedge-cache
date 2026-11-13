@@ -460,13 +460,16 @@ class TE_Headers {
 			);
 		}
 
-		// A 404 must not ride the long HTML TTL: a URL that 404s now may be published
-		// (or republished) a minute later, and bot floods of missing URLs should not
-		// sit in the cache for days. Short edge/browser life; stale-if-error kept so
-		// an origin error still serves the last copy. Filterable.
-		if ( is_404() ) {
+		// A 4xx (404 above all) must not ride the long HTML TTL: a URL that 404s now
+		// may be published (or republished) a minute later, and bot floods of
+		// missing URLs should not sit in the cache for days. Short edge/browser
+		// life; stale-if-error kept so an origin error still serves the last copy.
+		// (5xx never reach here: they are sent no-store.) Filterable, and the result
+		// still goes through flavor_edge_cache_profile below.
+		$http_status = function_exists( 'http_response_code' ) ? (int) http_response_code() : 200;
+		if ( is_404() || ( $http_status >= 400 && $http_status < 500 ) ) {
 			$profile = (array) apply_filters(
-				'flavor_edge_404_cache_profile',
+				'flavor_edge_error_cache_profile',
 				array(
 					'max_age'  => 60,
 					's_maxage' => 60,
