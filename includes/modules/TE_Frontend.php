@@ -95,7 +95,7 @@ class TE_Frontend {
 
 		// 3. Delay JS execution.
 		if ( $s['delay_js'] ) {
-			$html = $safe( self::apply_delay_js( $html, $s['delay_js_exclusions'] ), $html );
+			$html = $safe( self::apply_delay_js( $html, $s['delay_js_exclusions'], isset( $s['delay_js_force'] ) ? $s['delay_js_force'] : '' ), $html );
 		}
 
 		// 3.5. Let other modules rewrite the final HTML (e.g. self-hosting Google
@@ -295,21 +295,34 @@ class TE_Frontend {
 	 * Changes type="text/javascript" to type="flavoredge-delay" and adds
 	 * a small inline script that restores them on first interaction.
 	 *
+	 * Matching rule (exclusions and force list alike): case-insensitive substring
+	 * against the WHOLE <script> tag — attributes (src, id) and, for inline
+	 * scripts, the body. Inline scripts under 500 bytes are left alone unless a
+	 * force pattern matches them (third-party loaders such as GTM, Clarity or the
+	 * Meta Pixel are small inline snippets that inject the real script at runtime,
+	 * so the snippet is the only place where they can be delayed).
+	 *
 	 * @param string $html       HTML content.
 	 * @param string $exclusions Newline-separated list of patterns to exclude from delay.
+	 * @param string $force      Newline-separated list of patterns delayed regardless of size.
 	 * @return string
 	 */
-	private static function apply_delay_js( $html, $exclusions = '' ) {
+	private static function apply_delay_js( $html, $exclusions = '', $force = '' ) {
 		// Build exclusion patterns.
 		$exclude_patterns = array_filter( array_map( 'trim', explode( "\n", $exclusions ) ) );
+		$force_patterns   = array_map( 'strtolower', array_filter( array_map( 'trim', explode( "\n", (string) $force ) ) ) );
 
-		// Always exclude critical scripts.
+		// Always exclude critical scripts. Our own runtime is matched by its exact
+		// markers only: the files this plugin GENERATES (minified assets and the
+		// combined bundle under /cache/flavor-edge/min/) are theme/plugin code and
+		// must remain delayable like the originals they replace.
 		$always_exclude = array(
 			'jquery.min.js',
 			'jquery.js',
 			'jquery-migrate',
 			'wp-includes/js/dist',
-			'flavor-edge',       // Our own scripts.
+			'flavoredge-delay-restore', // Our delay runtime.
+			'data-flavor-bg',           // Our lazy background-image loader.
 			'admin-bar',
 			'wp-embed',
 			'wp-polyfill',
@@ -331,33 +344,76 @@ class TE_Frontend {
 			}
 		}
 
+		// Original (pre-minify) src per tag id. A script this plugin minified is
+		// printed with its copy's URL, so a pattern written against the original
+		// path ("contact-form-7/includes") is also checked against it.
+		$original_src = array();
+		if ( function_exists( 'wp_scripts' ) ) {
+			$ws = wp_scripts();
+			if ( $ws && ! empty( $ws->registered ) ) {
+				foreach ( $ws->registered as $h => $dep ) {
+					if ( ! empty( $dep->src ) && is_string( $dep->src ) ) {
+						$original_src[ strtolower( $h ) ] = strtolower( $dep->src );
+					}
+				}
+			}
+		}
+
+		// Handles whose external script has been delayed, so their "-js-after"
+		// inline (WP_Scripts::add_inline_script 'after') follows them: running it
+		// eagerly would execute it before the code it extends exists.
+		$delayed_handles = array();
+
 		// Process <script> tags.
 		$html = preg_replace_callback(
 			'/<script\b([^>]*)>(.*?)<\/script>/is',
-			function ( $matches ) use ( $exclude_patterns ) {
+			function ( $matches ) use ( $exclude_patterns, $force_patterns, $original_src, &$delayed_handles ) {
 				$attrs   = $matches[1];
 				$content = $matches[2];
 				$full    = $matches[0];
-
-				// Skip scripts without src (inline scripts) that are small.
-				if ( ! preg_match( '/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $attrs, $src_match ) ) {
-					// Only delay inline scripts if they're substantial (>500 bytes).
-					if ( strlen( trim( $content ) ) < 500 ) {
-						return $full;
-					}
-				}
 
 				// Skip if already has type that isn't text/javascript.
 				if ( preg_match( '/\btype\s*=\s*["\'](?!text\/javascript)[^"\']+["\']/i', $attrs ) ) {
 					return $full;
 				}
 
-				// Check exclusions using simple substring match (fast, no regex issues).
 				$full_lower = strtolower( $full );
-				foreach ( $exclude_patterns as $pattern ) {
-					if ( ! empty( $pattern ) && false !== strpos( $full_lower, strtolower( $pattern ) ) ) {
-						return $full;
+				$is_inline  = ! preg_match( '/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $attrs );
+				$handle_id  = preg_match( '/\bid\s*=\s*["\']([^"\']+)["\']/i', $attrs, $id_match ) ? strtolower( $id_match[1] ) : '';
+				if ( '' !== $handle_id && preg_match( '/^(.+)-js(?:-before|-after|-extra|-translations)?$/', $handle_id, $hm ) && isset( $original_src[ $hm[1] ] ) ) {
+					$full_lower .= ' ' . $original_src[ $hm[1] ];
+				}
+
+				// The "after" inline of a script we delayed must be delayed with it,
+				// whatever its size or the exclusion list say.
+				$follows = $is_inline && '' !== $handle_id && '-js-after' === substr( $handle_id, -9 )
+					&& isset( $delayed_handles[ substr( $handle_id, 0, -9 ) ] );
+
+				if ( ! $follows ) {
+					// Small inline scripts are left alone, unless the force list names them.
+					if ( $is_inline && strlen( trim( $content ) ) < 500 ) {
+						$forced = false;
+						foreach ( $force_patterns as $pattern ) {
+							if ( false !== strpos( $full_lower, $pattern ) ) {
+								$forced = true;
+								break;
+							}
+						}
+						if ( ! $forced ) {
+							return $full;
+						}
 					}
+
+					// Check exclusions using simple substring match (fast, no regex issues).
+					foreach ( $exclude_patterns as $pattern ) {
+						if ( ! empty( $pattern ) && false !== strpos( $full_lower, strtolower( $pattern ) ) ) {
+							return $full;
+						}
+					}
+				}
+
+				if ( ! $is_inline && '-js' === substr( $handle_id, -3 ) ) {
+					$delayed_handles[ substr( $handle_id, 0, -3 ) ] = true;
 				}
 
 				// Replace or add type attribute.
@@ -505,7 +561,7 @@ else{window.addEventListener("load",function(){setTimeout(r,5000)})}
 	 *
 	 * @return array List of origin URLs.
 	 */
-	public static function detect_third_party_domains() {
+	public static function detect_third_party_domains( $apply_exclusions = true ) {
 		$domains = array();
 		$active  = get_option( 'active_plugins', array() );
 
@@ -552,6 +608,38 @@ else{window.addEventListener("load",function(){setTimeout(r,5000)})}
 			$domains[] = 'https://secure.gravatar.com';
 		}
 
+		// Site-level exclusions (TE Cache → Optimization), so a theme that loads a
+		// service its own way does not need code to drop the hint.
+		if ( $apply_exclusions ) {
+			$domains = self::remove_excluded_hint_domains( $domains );
+		}
+
 		return apply_filters( 'flavor_edge_auto_prefetch_domains', $domains );
+	}
+
+	/**
+	 * Drop the auto-detected hint origins listed in the preconnect_exclusions
+	 * setting (one host or origin per line; matched by host, so
+	 * "www.googletagmanager.com" and "https://www.googletagmanager.com" both work).
+	 *
+	 * @param array $domains Origins.
+	 * @return array
+	 */
+	public static function remove_excluded_hint_domains( $domains ) {
+		$excluded = array();
+		foreach ( explode( "\n", (string) TE_Settings::get( 'preconnect_exclusions', '' ) ) as $line ) {
+			$line = strtolower( trim( $line ) );
+			if ( '' === $line ) {
+				continue;
+			}
+			$host       = wp_parse_url( false === strpos( $line, '//' ) ? '//' . $line : $line, PHP_URL_HOST );
+			$excluded[] = $host ? $host : $line;
+		}
+		if ( ! $excluded ) {
+			return $domains;
+		}
+		return array_values( array_filter( $domains, function ( $d ) use ( $excluded ) {
+			return ! in_array( strtolower( (string) wp_parse_url( $d, PHP_URL_HOST ) ), $excluded, true );
+		} ) );
 	}
 }

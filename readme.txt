@@ -125,6 +125,11 @@ Invalidation precision, observability and object-cache resilience.
 * Object cache (Redis): a Redis error or timeout no longer interrupts the page — the request continues on the in-memory cache and logs one line. Connect and per-command timeouts default to 1 s (WP_REDIS_TIMEOUT, WP_REDIS_READ_TIMEOUT). Batched writes (wp_cache_add_multiple / set_multiple) use one round-trip. The origin page cache's Redis backend gets the same guards.
 * Object cache: "Disable" now also turns off automatic installation, so the drop-in is not reinstalled on the next admin page load.
 * Minify: a plugin update no longer deletes minified files; old files are reaped by the background cleanup after its grace window.
+* Delay JS: scripts minified or combined by this plugin are now delayed like the originals they replace (they were previously always loaded eagerly). A delayed script's "after" inline code is delayed with it, a script excluded from Delay JS is kept out of the combined bundle, and exclusions written against a script's original path also match its minified copy.
+* Delay JS: new "Always Delay" list (TE Cache → Optimization) for small inline loader snippets — Google Tag Manager, Microsoft Clarity, Hotjar, Meta Pixel… — which are under the 500-byte threshold and were never delayed. Exclusions take precedence.
+* Delay JS: the matching rule is now documented in the panel — patterns match anywhere in the whole <script> tag (attributes and inline code), not only the src.
+* Resource hints: new "Exclude Auto-detected" list to drop auto-detected dns-prefetch/preconnect hosts without code (the flavor_edge_auto_prefetch_domains filter still applies).
+* Minify: the grace window for old minified files now follows the HTML cache lifetime (s-maxage + stale window + browser max-age + 1 h, at least one day) instead of a fixed day.
 
 = 1.12.1 =
 Maintenance release — correctness and robustness fixes, no new features.

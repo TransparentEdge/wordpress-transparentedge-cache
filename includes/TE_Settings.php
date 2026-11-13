@@ -106,6 +106,7 @@ class TE_Settings {
 			'combine_js_exclusions' => '',
 			'delay_js'              => false,
 			'delay_js_exclusions'   => '',
+			'delay_js_force'        => '',       // Patterns delayed even when they are small inline snippets (GTM, Clarity, Pixel…).
 			'defer_js'              => false,
 			'defer_js_exclusions'   => '',
 			'lazyload_images'       => true,
@@ -113,6 +114,7 @@ class TE_Settings {
 			'preload_lcp'           => false,
 			'selfhost_google_fonts' => false,
 			'dns_prefetch_urls'     => '',
+			'preconnect_exclusions' => '',       // Auto-detected hint origins to leave out (one host per line).
 
 			// Preload (bulk sitemap warm after a full purge).
 			'preload_sitemap'       => true,      // Opt-in: warm the whole sitemap after a full purge.

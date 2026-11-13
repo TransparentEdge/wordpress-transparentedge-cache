@@ -174,6 +174,10 @@ class TE_Dependency_Resolver {
 				continue;
 			}
 
+			// The tag's id ("<handle>-js") identifies it even when the plugin has
+			// rewritten the src to a minified copy with a different file name.
+			$fragments[] = $handle . '-js';
+
 			// Normalize: strip query string and domain, keep a distinctive path fragment.
 			$src = strtok( $src, '?' );
 			$path = wp_parse_url( $src, PHP_URL_PATH );

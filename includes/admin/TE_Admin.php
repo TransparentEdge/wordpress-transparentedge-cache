@@ -387,7 +387,7 @@ class TE_Admin {
 		}
 
 		$text_fields = array(
-			'invalidation_method', 'i3_max_length', 'delay_js_exclusions', 'defer_js_exclusions', 'combine_js_exclusions',
+			'invalidation_method', 'i3_max_length', 'delay_js_exclusions', 'delay_js_force', 'preconnect_exclusions', 'defer_js_exclusions', 'combine_js_exclusions',
 			'excluded_urls', 'excluded_cookies', 'dns_prefetch_urls', 'accepted_query_strings', 'allowed_query_strings', 'variant_header',
 			'heartbeat_behavior',
 			'speculation_mode', 'speculation_injection',

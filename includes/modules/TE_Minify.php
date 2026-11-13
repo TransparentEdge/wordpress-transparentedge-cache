@@ -557,6 +557,14 @@ class TE_Minify {
 		$user_exclude = array_filter( array_map( 'trim', explode( "\n", TE_Settings::get( 'combine_js_exclusions', '' ) ) ) );
 		$all_exclude = array_merge( self::$combine_exclude, $user_exclude );
 
+		// A script excluded from Delay JS stays out of the bundle: once inside it,
+		// its name is no longer in the HTML and the exclusion could not match, so it
+		// would be delayed together with the bundle.
+		if ( ! empty( $s['delay_js'] ) ) {
+			$delay_exclude = array_filter( array_map( 'trim', explode( "\n", (string) TE_Settings::get( 'delay_js_exclusions', '' ) ) ) );
+			$all_exclude   = array_merge( $all_exclude, $delay_exclude );
+		}
+
 		// Dependency-tree protection: if an excluded (non-combined) script depends
 		// on a script that would be combined, protect that dependency from being
 		// combined too — keeping load order intact. Adds the protected handles to
@@ -916,12 +924,23 @@ class TE_Minify {
 	 * edge is still serving stale against them. We instead leave old bundles in
 	 * place and let gc() reap them after this window, which must comfortably
 	 * outlast how long the edge may serve stale HTML before it revalidates.
-	 * Filterable; defaults to one day.
+	 * Derived from the HTML cache profile: the longest the edge may keep serving a
+	 * page (s-maxage + stale-while-revalidate/stale-if-error) plus the browser
+	 * max-age and an hour of margin; never less than one day. Filterable.
 	 *
 	 * @return int
 	 */
 	public static function grace() {
-		$grace = (int) apply_filters( 'flavor_edge_minify_grace', defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 );
+		$day = defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400;
+		$s   = class_exists( 'flavor_edge\\TE_Settings' ) ? TE_Settings::get_all() : array();
+		$max = 0;
+		foreach ( array( 'html', 'front_page' ) as $p ) {
+			$life = (int) ( $s[ $p . '_s_maxage' ] ?? 0 )
+				+ max( (int) ( $s[ $p . '_swr' ] ?? 0 ), (int) ( $s[ $p . '_sie' ] ?? 0 ) )
+				+ (int) ( $s[ $p . '_max_age' ] ?? 0 );
+			$max  = max( $max, $life );
+		}
+		$grace = (int) apply_filters( 'flavor_edge_minify_grace', max( $day, $max + 3600 ) );
 		return max( 300, $grace );
 	}
 

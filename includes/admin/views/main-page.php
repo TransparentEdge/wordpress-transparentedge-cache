@@ -830,7 +830,14 @@ defined( 'ABSPATH' ) || exit;
 					<th><label for="delay_js_exclusions"><?php esc_html_e( 'Delay JS Exclusions', 'flavor-edge-cache' ); ?></label></th>
 					<td>
 						<textarea id="delay_js_exclusions" name="delay_js_exclusions" rows="3" class="large-text code"><?php echo esc_textarea( $settings['delay_js_exclusions'] ); ?></textarea>
-						<p class="description"><?php esc_html_e( 'One pattern per line. jQuery is always excluded.', 'flavor-edge-cache' ); ?></p>
+						<p class="description"><?php esc_html_e( 'One pattern per line. jQuery is always excluded. A pattern matches anywhere in the whole <script> tag — its attributes (src, id) and, for inline scripts, its code — not only the src. A script injected at runtime by another script (e.g. gtm.js loaded by the GTM snippet) never appears in the HTML: write a pattern that matches the snippet that loads it. Excluded scripts are also kept out of the combined JS bundle.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="delay_js_force"><?php esc_html_e( 'Always Delay', 'flavor-edge-cache' ); ?></label></th>
+					<td>
+						<textarea id="delay_js_force" name="delay_js_force" rows="3" class="large-text code" placeholder="googletagmanager.com/gtm.js&#10;clarity.ms"><?php echo esc_textarea( $settings['delay_js_force'] ?? '' ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'One pattern per line, matched the same way as the exclusions. Small inline scripts (under 500 bytes) are not delayed by default; list here the loader snippets you want delayed anyway — Google Tag Manager, Microsoft Clarity, Hotjar, Meta Pixel… Exclusions take precedence.', 'flavor-edge-cache' ); ?></p>
 					</td>
 				</tr>
 
@@ -893,17 +900,30 @@ defined( 'ABSPATH' ) || exit;
 					<th><label for="dns_prefetch_urls"><?php esc_html_e( 'Additional DNS Prefetch', 'flavor-edge-cache' ); ?></label></th>
 					<td>
 						<?php
-						$auto_domains = \flavor_edge\TE_Frontend::detect_third_party_domains();
+						$auto_domains = \flavor_edge\TE_Frontend::detect_third_party_domains( false );
+						$kept_domains = \flavor_edge\TE_Frontend::remove_excluded_hint_domains( $auto_domains );
 						if ( ! empty( $auto_domains ) ) :
 						?>
 						<p style="margin-top:0;margin-bottom:8px;">
 							<strong><?php esc_html_e( 'Auto-detected:', 'flavor-edge-cache' ); ?></strong>
-							<?php echo esc_html( implode( ', ', array_map( function( $d ) { return wp_parse_url( $d, PHP_URL_HOST ); }, $auto_domains ) ) ); ?>
+							<?php
+							echo esc_html( implode( ', ', array_map( function( $d ) use ( $kept_domains ) {
+								$h = wp_parse_url( $d, PHP_URL_HOST );
+								return in_array( $d, $kept_domains, true ) ? $h : $h . ' (' . __( 'excluded', 'flavor-edge-cache' ) . ')';
+							}, $auto_domains ) ) );
+							?>
 							<br><span class="description"><?php esc_html_e( 'These domains are prefetched automatically based on your active plugins. No action needed.', 'flavor-edge-cache' ); ?></span>
 						</p>
 						<?php endif; ?>
 						<textarea id="dns_prefetch_urls" name="dns_prefetch_urls" rows="3" class="large-text code" placeholder="https://cdn.example.com&#10;https://api.third-party.com"><?php echo esc_textarea( $settings['dns_prefetch_urls'] ); ?></textarea>
 						<p class="description"><?php esc_html_e( 'Add any third-party origins not detected above (one per line). DNS is resolved and connections are opened before the browser needs them.', 'flavor-edge-cache' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="preconnect_exclusions"><?php esc_html_e( 'Exclude Auto-detected', 'flavor-edge-cache' ); ?></label></th>
+					<td>
+						<textarea id="preconnect_exclusions" name="preconnect_exclusions" rows="2" class="large-text code" placeholder="www.googletagmanager.com"><?php echo esc_textarea( $settings['preconnect_exclusions'] ?? '' ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Auto-detected hosts that should get no dns-prefetch/preconnect hint (one per line) — for example a service your theme loads only after interaction.', 'flavor-edge-cache' ); ?></p>
 					</td>
 				</tr>
 			</table>
