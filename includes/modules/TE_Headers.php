@@ -22,6 +22,24 @@ class TE_Headers {
 	private static $surrogate_keys = array();
 
 	/**
+	 * Keys discovered while the page renders (secondary loops: page-builder post
+	 * lists, Query Loop blocks, "recent posts" widgets). See note_rendered_post().
+	 *
+	 * @var array
+	 */
+	private static $rendered_keys = array();
+
+	/**
+	 * True once collect_surrogate_keys() ran for a cacheable front-end request.
+	 *
+	 * @var bool
+	 */
+	private static $collecting = false;
+
+	/** Option holding pages that list posts outside the main query (for the origin page cache). */
+	const LISTING_PAGES_OPTION = 'flavor_edge_listing_pages';
+
+	/**
 	 * Initialize header hooks.
 	 */
 	public static function init() {
@@ -36,8 +54,140 @@ class TE_Headers {
 		add_action( 'send_headers', array( __CLASS__, 'send_cache_headers' ), 1 );
 		add_action( 'template_redirect', array( __CLASS__, 'send_cache_headers_late' ), 999 );
 
+		// Posts rendered by secondary loops (page builders, Query Loop block…).
+		add_action( 'the_post', array( __CLASS__, 'note_rendered_post' ), 10, 2 );
+		add_filter( 'render_block_core/latest-posts', array( __CLASS__, 'note_latest_posts_block' ) );
+
 		// Hook into REST API responses too.
 		add_filter( 'rest_post_dispatch', array( __CLASS__, 'add_rest_headers' ), 10, 3 );
+	}
+
+	/**
+	 * Record a post rendered OUTSIDE the main query — e.g. a post list built with
+	 * Elementor, WPBakery, Divi, a Query Loop block or a "recent posts" widget on
+	 * an ordinary page. The main query cannot see those lists, so without this a
+	 * page that lists posts would carry no listing key and publishing a post would
+	 * not refresh it.
+	 *
+	 *  - post-<id> of each such post (shared cap with the main listing), so
+	 *    editing one refreshes every page that shows it;
+	 *  - on PAGES only, lst-type-<type>, so publishing a post of that type
+	 *    refreshes them. Not on singles of other types: a "related posts" block on
+	 *    every article would otherwise tie all articles to every publish (that is
+	 *    the opt-in publish_refresh_singles behaviour).
+	 *
+	 * @param \WP_Post       $post  Post being set up.
+	 * @param \WP_Query|null $query Query running the loop.
+	 */
+	public static function note_rendered_post( $post, $query = null ) {
+		if ( ! self::$collecting || ! is_object( $post ) || empty( $post->ID ) ) {
+			return;
+		}
+		// Posts of the main query are already keyed by collect_surrogate_keys().
+		// (Checked by ID, not by $query: setup_postdata() on a get_posts() result
+		// reports the MAIN query even though the post is not part of it.)
+		global $wp_query;
+		if ( (int) $post->ID === (int) get_queried_object_id() ) {
+			return;
+		}
+		if ( $wp_query instanceof \WP_Query && ! empty( $wp_query->posts ) && ! is_singular() ) {
+			foreach ( $wp_query->posts as $main ) {
+				if ( isset( $main->ID ) && (int) $main->ID === (int) $post->ID ) {
+					return;
+				}
+			}
+		}
+		$max = (int) apply_filters( 'flavor_edge_listing_post_keys_max', 100 );
+		if ( count( self::$rendered_keys ) < $max ) {
+			self::$rendered_keys[ 'post-' . (int) $post->ID ] = true;
+		}
+		if ( is_page() && ! empty( $post->post_type ) && 'page' !== $post->post_type ) {
+			self::$rendered_keys[ 'lst-type-' . sanitize_key( $post->post_type ) ] = true;
+		}
+	}
+
+	/**
+	 * The core "Latest Posts" block lists posts without running a loop.
+	 *
+	 * @param string $content Block HTML.
+	 * @return string
+	 */
+	public static function note_latest_posts_block( $content ) {
+		if ( self::$collecting && is_page() ) {
+			self::$rendered_keys['lst-type-post'] = true;
+		}
+		return $content;
+	}
+
+	/**
+	 * Output-buffer callback (innermost buffer, so it runs before the origin page
+	 * cache captures the response): re-send Surrogate-Keys with the keys found
+	 * while rendering. Headers cannot change once output was flushed (a theme
+	 * calling flush()); then the response keeps the keys known up front.
+	 *
+	 * @param string $html Buffered output.
+	 * @return string Unchanged output.
+	 */
+	public static function flush_rendered_keys( $html ) {
+		if ( empty( self::$rendered_keys ) || headers_sent() ) {
+			return $html;
+		}
+		$new = array_diff( array_keys( self::$rendered_keys ), self::$surrogate_keys );
+		if ( ! $new ) {
+			return $html;
+		}
+		self::$surrogate_keys = array_values( array_unique( array_merge( self::$surrogate_keys, array_map( 'sanitize_key', $new ) ) ) );
+		header( 'Surrogate-Keys: ' . implode( ' ', self::$surrogate_keys ), true );
+		if ( headers_list() && preg_grep( '/^X-Flavor-Edge-Keys:/i', headers_list() ) ) {
+			header( 'X-Flavor-Edge-Keys: ' . implode( ' ', self::$surrogate_keys ), true );
+		}
+		self::remember_listing_page( $new );
+		return $html;
+	}
+
+	/**
+	 * The origin page cache invalidates by URL, so it must know which pages carry
+	 * a builder-made lst-type-<type> key. Remember them (a small, non-autoloaded
+	 * map, written only when a new page appears) — see listing_pages_for().
+	 *
+	 * @param array $keys Keys added at render time.
+	 */
+	private static function remember_listing_page( $keys ) {
+		$types = array();
+		foreach ( $keys as $k ) {
+			if ( 0 === strpos( $k, 'lst-type-' ) ) {
+				$types[] = substr( $k, 9 );
+			}
+		}
+		$id = (int) get_queried_object_id();
+		if ( ! $types || ! $id ) {
+			return;
+		}
+		$map     = get_option( self::LISTING_PAGES_OPTION, array() );
+		$map     = is_array( $map ) ? $map : array();
+		$changed = false;
+		foreach ( $types as $type ) {
+			$list = isset( $map[ $type ] ) ? (array) $map[ $type ] : array();
+			if ( ! in_array( $id, $list, true ) ) {
+				array_unshift( $list, $id );
+				$map[ $type ] = array_slice( $list, 0, 50 );
+				$changed      = true;
+			}
+		}
+		if ( $changed ) {
+			update_option( self::LISTING_PAGES_OPTION, $map, false );
+		}
+	}
+
+	/**
+	 * Page IDs known to list posts of a type outside the main query.
+	 *
+	 * @param string $type Post type.
+	 * @return int[]
+	 */
+	public static function listing_pages_for( $type ) {
+		$map = get_option( self::LISTING_PAGES_OPTION, array() );
+		return ( is_array( $map ) && isset( $map[ $type ] ) ) ? array_map( 'intval', (array) $map[ $type ] ) : array();
 	}
 
 	/**
@@ -197,6 +347,7 @@ class TE_Headers {
 
 		// Deduplicate and sanitize.
 		self::$surrogate_keys = array_unique( array_map( 'sanitize_key', $keys ) );
+		self::$collecting     = true;
 	}
 
 	/**
@@ -253,6 +404,11 @@ class TE_Headers {
 		// Surrogate-Keys.
 		if ( $settings['surrogate_keys'] && ! empty( self::$surrogate_keys ) ) {
 			header( 'Surrogate-Keys: ' . implode( ' ', self::$surrogate_keys ) );
+			// Buffer the body so keys found while it renders (secondary loops) can
+			// still be added to the header before it is sent.
+			if ( self::$collecting ) {
+				ob_start( array( __CLASS__, 'flush_rendered_keys' ) );
+			}
 		}
 
 		// Vary. Emit the safe set now AND re-assert it right before PHP sends

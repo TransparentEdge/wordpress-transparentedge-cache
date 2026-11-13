@@ -636,6 +636,16 @@ class TE_PageCache {
 						$urls[] = get_permalink( $blog_page_id );
 					}
 				}
+				// Ordinary pages that list this type through a page builder or block
+				// (recorded by TE_Headers when they render).
+				if ( 0 === strpos( $tag, 'lst-' ) && class_exists( __NAMESPACE__ . '\\TE_Headers' ) ) {
+					foreach ( TE_Headers::listing_pages_for( $m[1] ) as $page_id ) {
+						$link = get_permalink( $page_id );
+						if ( $link ) {
+							$urls[] = $link;
+						}
+					}
+				}
 			}
 		}
 		if ( ! empty( $urls ) ) {
