@@ -157,6 +157,7 @@ class TE_PageCache {
 			'dir'       => self::store_dir(),
 			'prefix'    => 'fepc:' . substr( md5( (string) home_url() ), 0, 8 ) . ':',
 			'max_bytes' => (int) apply_filters( 'flavor_edge_page_cache_max_bytes', 2097152 ),
+			'hv'        => self::header_version(),
 		);
 	}
 
@@ -571,6 +572,28 @@ class TE_PageCache {
 			}
 		}
 		return (array) apply_filters( 'flavor_edge_pc_replayed_headers', $headers );
+	}
+
+	/**
+	 * Fingerprint of the settings that shape response headers (plus the plugin
+	 * version). Stored with every entry and in the serve config: a stored page
+	 * whose fingerprint differs from the current one is treated as a miss and
+	 * re-rendered, so a changed TTL or security header can never be replayed
+	 * stale — even if a flush did not reach that entry (e.g. files owned by
+	 * another system user that the web server cannot delete).
+	 *
+	 * @return string
+	 */
+	public static function header_version() {
+		$s   = TE_Settings::get_all();
+		$sel = array();
+		foreach ( (array) $s as $k => $v ) {
+			if ( preg_match( '/^(html_|front_page_|sec_header|vary_|surrogate_keys$|headers_enabled$)/', (string) $k ) ) {
+				$sel[ $k ] = is_bool( $v ) ? (int) $v : (string) ( is_scalar( $v ) ? $v : wp_json_encode( $v ) );
+			}
+		}
+		ksort( $sel );
+		return substr( md5( serialize( $sel ) . '|' . ( defined( 'FLAVOR_EDGE_VERSION' ) ? FLAVOR_EDGE_VERSION : '' ) ), 0, 12 );
 	}
 
 	/**

@@ -68,7 +68,16 @@ class TE_PageCache_Store {
 		// Per-entry cap (0 = unlimited). Guards a weak origin's disk against an
 		// attacker forcing huge responses into the cache. Default 2 MiB.
 		$this->max_bytes = isset( $config['max_bytes'] ) ? max( 0, (int) $config['max_bytes'] ) : 2097152;
+		$this->hv        = isset( $config['hv'] ) ? (string) $config['hv'] : '';
 	}
+
+	/**
+	 * Fingerprint of the header-shaping settings the entries must match (see
+	 * TE_PageCache::header_version). '' = no check.
+	 *
+	 * @var string
+	 */
+	private $hv = '';
 
 	/** @var int per-entry byte cap (0 = unlimited) */
 	private $max_bytes = 2097152;
@@ -133,12 +142,21 @@ class TE_PageCache_Store {
 	public function get( $key ) {
 		switch ( $this->backend ) {
 			case 'redis':
-				return $this->redis_get( $key );
+				$hit = $this->redis_get( $key );
+				break;
 			case 'memcached':
-				return $this->memcached_get( $key );
+				$hit = $this->memcached_get( $key );
+				break;
 			default:
-				return $this->disk_get( $key );
+				$hit = $this->disk_get( $key );
+				break;
 		}
+		// Stored under different header settings (or by an earlier version that
+		// kept fewer headers): a miss, so the page is rendered and stored again.
+		if ( null !== $hit && '' !== $this->hv && ( isset( $hit['hv'] ) ? $hit['hv'] : '' ) !== $this->hv ) {
+			return null;
+		}
+		return $hit;
 	}
 
 	/**
@@ -158,6 +176,7 @@ class TE_PageCache_Store {
 			'created' => time(),
 			'ctype'   => isset( $meta['ctype'] ) ? (string) $meta['ctype'] : 'text/html; charset=UTF-8',
 			'headers' => ( isset( $meta['headers'] ) && is_array( $meta['headers'] ) ) ? array_values( $meta['headers'] ) : array(),
+			'hv'      => $this->hv,
 			'html'    => (string) $html,
 		);
 		$t0 = microtime( true );
@@ -309,6 +328,7 @@ class TE_PageCache_Store {
 			'ctype'   => $entry['ctype'],
 			'headers' => ( isset( $entry['headers'] ) && is_array( $entry['headers'] ) ) ? $entry['headers'] : array(),
 			'created' => $entry['created'],
+			'hv'      => isset( $entry['hv'] ) ? (string) $entry['hv'] : '',
 		);
 	}
 
@@ -361,12 +381,20 @@ class TE_PageCache_Store {
 			new \RecursiveDirectoryIterator( $this->dir, \FilesystemIterator::SKIP_DOTS ),
 			\RecursiveIteratorIterator::CHILD_FIRST
 		);
+		$left = 0;
 		foreach ( $it as $item ) {
 			if ( $item->isDir() ) {
 				@rmdir( $item->getPathname() );
-			} elseif ( '.cache' === substr( $item->getFilename(), -6 ) ) {
-				@unlink( $item->getPathname() );
+			} elseif ( '.cache' === substr( $item->getFilename(), -6 ) && ! @unlink( $item->getPathname() ) ) {
+				$left++;
 			}
+		}
+		if ( $left ) {
+			// Typically files created by another system user (e.g. WP-CLI run as a
+			// different user than the web server). The header fingerprint still
+			// keeps them from being served with outdated headers.
+			error_log( sprintf( '[Flavor Edge Cache] page cache flush: %d entries could not be deleted (check ownership of %s)', $left, $this->dir ) ); // phpcs:ignore
+			return false;
 		}
 		return true;
 	}

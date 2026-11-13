@@ -118,6 +118,7 @@ Soft purge is the default; add `--hard` to force an immediate purge. The command
 = 1.13.1 =
 * Origin page cache: a page served from the origin page cache now carries the same headers as a fresh render — security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS, CSP) and any other header the site sets. Previously only Cache-Control, Vary, Surrogate-Keys, Link and Content-Language were kept. Per-request headers (Set-Cookie, Date, ETag, Content-Length…) are never stored. Filter: flavor_edge_pc_replayed_headers.
 * Origin page cache: changing a setting that shapes response headers (HTML TTLs, front-page profile, security headers, Vary, Surrogate-Keys) now empties the origin page cache, so stored pages pick up the new headers instead of replaying the previous ones until they expire.
+* Origin page cache: every stored page carries a fingerprint of the header settings; a page stored under other settings is re-rendered instead of served, even if a flush could not delete it (for example, files owned by a different system user). A flush that cannot delete some entries now says so in the PHP error log.
 * On update to 1.13.1 the origin page cache is emptied once so pages are stored again with their full headers. Copies already held by the CDN get them as they refresh; purge the CDN to apply it at once.
 
 = 1.13.0 =

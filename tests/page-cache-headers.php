@@ -73,5 +73,19 @@ check( "'1' vs true is not a change", ! $changed( array( 'headers_enabled' => '1
 TE_PageCache::flush_on_header_settings_change( 'x', array() ); // non-array input must not fatal.
 check( 'non-array input tolerated', true );
 
+echo "== header fingerprint (disk store) ==\n";
+require_once __DIR__ . '/../includes/pagecache/TE_PageCache_Store.php';
+$dir = sys_get_temp_dir() . '/fepc-hv-' . getmypid();
+$a   = new TE_PageCache_Store( array( 'backend' => 'disk', 'dir' => $dir, 'ttl' => 300, 'hv' => 'aaaaaaaaaaaa' ) );
+$k   = $a->key( 'example.com', '/x/', 'desktop' );
+$a->set( $k, '<html>x</html>', array( 'headers' => array( 'Cache-Control: max-age=3600' ) ) );
+check( 'same fingerprint → hit', null !== $a->get( $k ) );
+$b = new TE_PageCache_Store( array( 'backend' => 'disk', 'dir' => $dir, 'ttl' => 300, 'hv' => 'bbbbbbbbbbbb' ) );
+check( 'settings changed (new fingerprint) → miss, never replays old headers', null === $b->get( $k ) );
+$c = new TE_PageCache_Store( array( 'backend' => 'disk', 'dir' => $dir, 'ttl' => 300 ) );
+check( 'no fingerprint configured → no check (old config.php)', null !== $c->get( $k ) );
+$c->flush();
+@array_map( 'unlink', glob( $dir . '*/*/*' ) ?: array() );
+
 echo $failures ? "\n$failures FAILED\n" : "\nALL TESTS PASSED\n";
 exit( $failures ? 1 : 0 );
