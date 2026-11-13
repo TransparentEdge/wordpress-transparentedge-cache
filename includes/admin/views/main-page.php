@@ -491,7 +491,7 @@ defined( 'ABSPATH' ) || exit;
 				</tr>
 				<tr>
 					<th colspan="2">
-						<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'Static files are served by the web server, not PHP. The plugin sets Cache-Control headers so Varnish respects these TTLs from the origin. When assets change (media uploads, theme/plugin updates), the plugin invalidates them automatically.', 'flavor-edge-cache' ); ?></p>
+						<p class="description" style="font-weight:normal;margin:0;"><?php esc_html_e( 'Static files are served by the web server, not PHP. On Apache/LiteSpeed the plugin writes these TTLs into .htaccess; on nginx they only apply once the snippet below is installed by hand. The check below shows what browsers really receive. When assets change (media uploads, theme/plugin updates), the plugin invalidates them automatically.', 'flavor-edge-cache' ); ?></p>
 					</th>
 				</tr>
 				<tr>
@@ -516,15 +516,42 @@ defined( 'ABSPATH' ) || exit;
 							<?php echo esc_html( ucfirst( $bc_status['server'] ) ); ?> —
 							<?php if ( $bc_status['installed'] ) : ?>
 								<span style="color:#155724;">✓ <?php echo esc_html( $bc_status['message'] ); ?></span>
-							<?php elseif ( 'nginx' === $bc_status['server'] ) : ?>
-								<span style="color:#0073aa;"><?php echo esc_html( $bc_status['message'] ); ?></span>
 							<?php else : ?>
 								<span style="color:#856404;">⚠ <?php echo esc_html( $bc_status['message'] ); ?></span>
 							<?php endif; ?>
 						</p>
 
+						<?php
+						$bc_probe = $bc_status['probe'];
+						$bc_check = wp_nonce_url( add_query_arg( array( 'page' => 'flavor-edge-cache', 'flavor_edge_probe_static' => 1 ), admin_url( 'admin.php' ) ), 'flavor_edge_probe_static' );
+						?>
+						<p>
+							<strong><?php esc_html_e( 'What browsers receive:', 'flavor-edge-cache' ); ?></strong>
+							<?php if ( ! $bc_probe ) : ?>
+								<?php esc_html_e( 'not checked yet.', 'flavor-edge-cache' ); ?>
+							<?php else : ?>
+								<?php
+								$bc_colors = array( 'ok' => '#155724', 'lower' => '#856404', 'missing' => '#a00', 'error' => '#856404' );
+								$bc_labels = array(
+									/* translators: 1: max-age received, 2: max-age expected */
+									'ok'      => sprintf( __( '✓ max-age=%1$d (expected %2$d).', 'flavor-edge-cache' ), (int) $bc_probe['max_age'], (int) $bc_probe['expected'] ),
+									/* translators: 1: max-age received, 2: max-age expected */
+									'lower'   => sprintf( __( '⚠ max-age=%1$d, lower than the %2$d expected — another layer is setting it.', 'flavor-edge-cache' ), (int) $bc_probe['max_age'], (int) $bc_probe['expected'] ),
+									'missing' => __( '✗ no max-age: browsers do not cache static files. The rules are not being applied — install the snippet for your server or the VCL below.', 'flavor-edge-cache' ),
+									/* translators: %s: HTTP status or error */
+									'error'   => sprintf( __( '⚠ could not check (%s).', 'flavor-edge-cache' ), $bc_probe['status'] ? 'HTTP ' . (int) $bc_probe['status'] : $bc_probe['cc'] ),
+								);
+								$bc_state = isset( $bc_labels[ $bc_probe['state'] ] ) ? $bc_probe['state'] : 'error';
+								?>
+								<span style="color:<?php echo esc_attr( $bc_colors[ $bc_state ] ); ?>;"><?php echo esc_html( $bc_labels[ $bc_state ] ); ?></span>
+								<br><span class="description"><code><?php echo esc_html( $bc_probe['cc'] ? $bc_probe['cc'] : '—' ); ?></code> · <?php echo esc_html( $bc_probe['url'] ); ?> · <?php echo esc_html( wp_date( 'Y-m-d H:i', (int) $bc_probe['t'] ) ); ?></span>
+							<?php endif; ?>
+							<a href="<?php echo esc_url( $bc_check ); ?>" class="button button-small" style="margin-left:6px;"><?php esc_html_e( 'Check now', 'flavor-edge-cache' ); ?></a>
+						</p>
+						<p class="description"><?php esc_html_e( 'Checked by requesting one of the plugin\'s own files through the CDN, as a visitor would. Files the plugin generates (minified/combined CSS and JS) are named after their content, so they are served for a year as immutable, whatever the Browser TTL above.', 'flavor-edge-cache' ); ?></p>
+
 						<?php if ( 'nginx' === $bc_status['server'] || 'unknown' === $bc_status['server'] ) : ?>
-						<details style="margin-top:8px;">
+						<details style="margin-top:8px;"<?php echo ( $bc_probe && 'missing' === $bc_probe['state'] ) ? ' open' : ''; ?>>
 							<summary style="cursor:pointer;font-weight:600;font-size:13px;color:#0073aa;">
 								<?php esc_html_e( 'Nginx config snippet (add to your server {} block)', 'flavor-edge-cache' ); ?>
 							</summary>
@@ -536,6 +563,17 @@ defined( 'ABSPATH' ) || exit;
 							</div>
 						</details>
 						<?php endif; ?>
+						<details style="margin-top:8px;">
+							<summary style="cursor:pointer;font-weight:600;font-size:13px;color:#0073aa;">
+								<?php esc_html_e( 'Transparent Edge VCL snippet (applies the TTLs at the edge when the origin sends none)', 'flavor-edge-cache' ); ?>
+							</summary>
+							<div style="position:relative;margin-top:8px;">
+								<pre id="te-static-vcl"><code><?php echo esc_html( \flavor_edge\TE_BrowserCache::generate_vcl_snippet() ); ?></code></pre>
+								<button type="button" class="button button-secondary te-copy-btn" data-target="te-static-vcl" style="position:absolute;top:8px;right:8px;">
+									<?php esc_html_e( '📋 Copy', 'flavor-edge-cache' ); ?>
+								</button>
+							</div>
+						</details>
 
 						<p class="description" style="margin-top:8px;">
 							<?php esc_html_e( 'Static asset invalidation is automatic: media uploads, theme and plugin updates trigger Varnish purge. WordPress version strings (?ver=X) on CSS/JS handle browser cache-busting.', 'flavor-edge-cache' ); ?>

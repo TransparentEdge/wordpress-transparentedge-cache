@@ -464,7 +464,9 @@ class TE_Minify {
 				'after'  => $inline_after,
 				'before' => $inline_before,
 			);
-			$hash_parts[] = $handle . ':' . ( $dep->ver ?: filemtime( $local_path ) );
+			// ver AND mtime: a file edited without a version bump gets a new bundle
+			// name, so a bundle name always maps to one content (safe to mark immutable).
+			$hash_parts[] = $handle . ':' . $dep->ver . ':' . (int) @filemtime( $local_path );
 
 			// Inline CSS must be part of the cache key: two pages with the same
 			// stylesheets but different inline CSS must not share a bundle.
@@ -621,7 +623,9 @@ class TE_Minify {
 				'after'  => isset( $dep->extra['after'] ) ? $dep->extra['after'] : array(),
 				'data'   => isset( $dep->extra['data'] ) ? $dep->extra['data'] : '',
 			);
-			$hash_parts[] = $handle . ':' . ( $dep->ver ?: filemtime( $local_path ) );
+			// ver AND mtime: a file edited without a version bump gets a new bundle
+			// name, so a bundle name always maps to one content (safe to mark immutable).
+			$hash_parts[] = $handle . ':' . $dep->ver . ':' . (int) @filemtime( $local_path );
 		}
 
 		// Never combine a handle that a NON-combined registered script depends on: it
@@ -654,7 +658,7 @@ class TE_Minify {
 		// Rebuild the cache-key hash from the surviving set only.
 		$hash_parts = array();
 		foreach ( $to_combine as $handle => $info ) {
-			$hash_parts[] = $handle . ':' . $info['ver'];
+			$hash_parts[] = $handle . ':' . $info['ver'] . ':' . (int) @filemtime( $info['path'] );
 		}
 
 		// Minify flag + plugin version in the key, so toggling "Minify JS" or a plugin
