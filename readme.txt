@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.13.0
+Stable tag: 1.13.1
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -114,6 +114,11 @@ The plugin registers a `wp te-cache` command for operations and deploy pipelines
 Soft purge is the default; add `--hard` to force an immediate purge. The commands are thin wrappers over the same hardened purge/preload APIs the plugin uses internally.
 
 == Changelog ==
+
+= 1.13.1 =
+* Origin page cache: a page served from the origin page cache now carries the same headers as a fresh render — security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS, CSP) and any other header the site sets. Previously only Cache-Control, Vary, Surrogate-Keys, Link and Content-Language were kept. Per-request headers (Set-Cookie, Date, ETag, Content-Length…) are never stored. Filter: flavor_edge_pc_replayed_headers.
+* Origin page cache: changing a setting that shapes response headers (HTML TTLs, front-page profile, security headers, Vary, Surrogate-Keys) now empties the origin page cache, so stored pages pick up the new headers instead of replaying the previous ones until they expire.
+* On update to 1.13.1 the origin page cache is emptied once so pages are stored again with their full headers. Copies already held by the CDN get them as they refresh; purge the CDN to apply it at once.
 
 = 1.13.0 =
 Invalidation precision, observability and object-cache resilience.

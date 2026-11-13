@@ -70,6 +70,9 @@ class TE_PageCache {
 
 		// Keep the drop-in config in sync even on WP-CLI / programmatic saves.
 		add_action( 'update_option_' . TE_Settings::OPTION_KEY, array( __CLASS__, 'write_config_file' ) );
+		// Stored pages replay the headers they were rendered with: when a setting
+		// that shapes those headers changes, empty the shield so the change shows.
+		add_action( 'update_option_' . TE_Settings::OPTION_KEY, array( __CLASS__, 'flush_on_header_settings_change' ), 20, 2 );
 
 		// INVALIDATE: a full purge empties everything; a tag or URL purge is
 		// surgical, so a busy news site does not keep the shield permanently
@@ -544,19 +547,52 @@ class TE_PageCache {
 	}
 
 	/**
-	 * The response headers worth replaying on a drop-in hit, so a cached serve
-	 * looks identical to a fresh render to the edge (Cache-Control, Vary, keys).
+	 * The response headers replayed on a drop-in hit, so a cached serve looks
+	 * identical to a fresh render: Cache-Control, Vary, Surrogate-Keys, and also
+	 * the security headers (X-Content-Type-Options, X-Frame-Options,
+	 * Referrer-Policy, Permissions-Policy, HSTS, CSP) and any other header the
+	 * site sets (X-Robots-Tag, Content-Signal, Link…). Before, only five were
+	 * kept, so every shield hit went out WITHOUT the security headers.
+	 * Excluded: per-request / per-user / transport headers, which must never be
+	 * frozen into a shared copy.
 	 */
-	private static function capturable_headers() {
-		$keep    = array( 'cache-control', 'vary', 'surrogate-keys', 'link', 'content-language' );
+	private static function capturable_headers( $list = null ) {
+		$skip    = array(
+			'set-cookie', 'content-type', 'content-length', 'content-encoding', 'transfer-encoding',
+			'connection', 'keep-alive', 'date', 'age', 'expires', 'pragma', 'last-modified', 'etag',
+			'server', 'x-powered-by', 'location', 'status', 'refresh', 'www-authenticate',
+			'x-flavoredge-pagecache', 'x-flavor-edge-keys', 'x-flavor-edge-ttl', 'x-redirect-by', 'x-pingback',
+		);
 		$headers = array();
-		foreach ( headers_list() as $h ) {
-			$name = strtolower( trim( strtok( $h, ':' ) ) );
-			if ( in_array( $name, $keep, true ) ) {
+		foreach ( ( null === $list ? headers_list() : (array) $list ) as $h ) {
+			$name = strtolower( trim( (string) strtok( $h, ':' ) ) );
+			if ( '' !== $name && ! in_array( $name, $skip, true ) ) {
 				$headers[] = $h;
 			}
 		}
-		return $headers;
+		return (array) apply_filters( 'flavor_edge_pc_replayed_headers', $headers );
+	}
+
+	/**
+	 * Settings that change the headers a page is served with. When one changes,
+	 * the stored copies are stale in their headers even if the HTML is not.
+	 *
+	 * @param mixed $old Previous option value.
+	 * @param mixed $new New option value.
+	 */
+	public static function flush_on_header_settings_change( $old, $new ) {
+		if ( ! is_array( $old ) || ! is_array( $new ) ) {
+			return;
+		}
+		foreach ( array_unique( array_merge( array_keys( $old ), array_keys( $new ) ) ) as $k ) {
+			if ( ! preg_match( '/^(html_|front_page_|sec_header|vary_|surrogate_keys$|headers_enabled$)/', (string) $k ) ) {
+				continue;
+			}
+			if ( ( $old[ $k ] ?? null ) != ( $new[ $k ] ?? null ) ) { // phpcs:ignore -- loose: '1' vs true.
+				self::flush_all();
+				return;
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------------

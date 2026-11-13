@@ -3,7 +3,7 @@
  * Plugin Name:       Transparent Edge Cache
  * Plugin URI:        https://www.transparentedge.eu/
  * Description:       Plugin de caché y optimización para Transparent Edge CDN. Invalidación inteligente por Surrogate-Keys, Soft Purge, Refetch, optimización de imágenes i3 y control avanzado de headers HTTP para Varnish Enterprise.
- * Version:           1.13.0
+ * Version:           1.13.1
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Transparent Edge Services
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Plugin constants.
-define( 'FLAVOR_EDGE_VERSION', '1.13.0' );
+define( 'FLAVOR_EDGE_VERSION', '1.13.1' );
 define( 'FLAVOR_EDGE_FILE', __FILE__ );
 define( 'FLAVOR_EDGE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_EDGE_URL', plugin_dir_url( __FILE__ ) );
@@ -141,6 +141,13 @@ function flavor_edge_init() {
 		if ( '0' !== $stored_version && version_compare( $stored_version, '1.13.0', '<' )
 			&& ! wp_next_scheduled( 'flavor_edge_upgrade_purge' ) ) {
 			wp_schedule_single_event( time() + 30, 'flavor_edge_upgrade_purge' );
+		}
+		// Before 1.13.1 the origin page cache stored pages without their security
+		// headers (and other site headers), so every stored copy is incomplete:
+		// empty it once (an O(1) rename) so the next render stores full headers.
+		if ( '0' !== $stored_version && version_compare( $stored_version, '1.13.1', '<' )
+			&& class_exists( 'flavor_edge\\TE_PageCache' ) ) {
+			\flavor_edge\TE_PageCache::flush_all();
 		}
 	}
 

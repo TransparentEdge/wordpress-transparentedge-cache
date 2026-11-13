@@ -15,7 +15,8 @@ ob_start(); // CLI: keep headers_sent() false, as during a buffered page render.
 
 class TE_Settings { public static function get_all() { return array(); } public static function get( $k, $d = null ) { return $d; } }
 function apply_filters( $tag, $value ) { return $value; }
-function sanitize_key( $k ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', $k ) ); }
+function sanitize_key( $k ) { return \sanitize_key( $k ); }
+eval( 'function sanitize_key( $k ) { return strtolower( preg_replace( "/[^a-z0-9_\\-]/i", "", $k ) ); }' );
 $GLOBALS['__ctx'] = array( 'page' => true, 'singular' => true, 'qid' => 31 );
 function is_page() { return $GLOBALS['__ctx']['page']; }
 function is_singular() { return $GLOBALS['__ctx']['singular']; }
