@@ -556,6 +556,20 @@ defined( 'ABSPATH' ) || exit;
 								<?php esc_html_e( 'Nginx config snippet (add to your server {} block)', 'flavor-edge-cache' ); ?>
 							</summary>
 							<div style="position:relative;margin-top:8px;">
+								<?php
+								$fe_ngx_file = \flavor_edge\TE_BrowserCache::nginx_conf_path();
+								$fe_ngx_ok   = \flavor_edge\TE_BrowserCache::nginx_conf_current() || \flavor_edge\TE_BrowserCache::write_nginx_conf();
+								?>
+								<?php if ( $fe_ngx_ok ) : ?>
+								<p style="margin-top:0;">
+									<?php esc_html_e( 'The plugin keeps these rules in a file. Add this line ONCE inside the server {} block, test and reload nginx; after that, changing the TTLs above only needs another nginx reload:', 'flavor-edge-cache' ); ?>
+									<br><code id="te-nginx-include">include <?php echo esc_html( $fe_ngx_file ); ?>;</code>
+									<button type="button" class="button button-small te-copy-btn" data-target="te-nginx-include"><?php esc_html_e( '📋 Copy', 'flavor-edge-cache' ); ?></button>
+								</p>
+								<p class="description"><?php esc_html_e( 'Or copy the rules below into the server block by hand (then they do not follow later changes).', 'flavor-edge-cache' ); ?></p>
+								<?php else : ?>
+								<p class="description"><?php esc_html_e( 'The rules file could not be written (wp-content/cache/flavor-edge/ is not writable): copy the rules below into the server block.', 'flavor-edge-cache' ); ?></p>
+								<?php endif; ?>
 								<pre id="te-nginx-snippet"><code><?php echo esc_html( \flavor_edge\TE_BrowserCache::generate_nginx_snippet() ); ?></code></pre>
 								<button type="button" class="button button-secondary te-copy-btn" data-target="te-nginx-snippet" style="position:absolute;top:8px;right:8px;">
 									<?php esc_html_e( '📋 Copy', 'flavor-edge-cache' ); ?>

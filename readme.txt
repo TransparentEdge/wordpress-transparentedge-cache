@@ -121,6 +121,9 @@ Soft purge is the default; add `--hard` to force an immediate purge. The command
 * Theme/plugin updates trigger a site purge only for theme or plugin updates (not translation packs or core updates), at most once per request. Filter: flavor_edge_purge_on_asset_change.
 * Removed an unused setting (debounce_seconds; the debounce remains, filter flavor_edge_purge_debounce_seconds) and code that tried to set headers on static files from PHP (static files are served by the web server).
 * Origin page cache: stored entries are read without allowing PHP objects; CORS, Server-Timing and X-Request-Id headers are never stored.
+* nginx: the plugin keeps its static-file rules in wp-content/cache/flavor-edge/nginx.conf. Include it once in the server block (the panel shows the exact line); afterwards a TTL change only needs an nginx reload, no new copy and paste.
+* Self-hosted Google Fonts files are named after their versioned source and are now served for a year as immutable too (Apache automatically; nginx and VCL snippets updated).
+* Uninstall (deleting the plugin) removes its options and transients — API credentials included —, media signatures, scheduled events and its cache directory. Deactivation also clears every scheduled event, including one left by earlier versions.
 * Cookie diagnostic verifies TLS on its request to the site; admin JavaScript no longer writes debug output to the browser console.
 
 = 1.13.1 =

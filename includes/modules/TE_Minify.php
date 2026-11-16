@@ -872,9 +872,9 @@ class TE_Minify {
 		if ( ! is_dir( $cache_dir ) ) {
 			wp_mkdir_p( $cache_dir );
 
-			// Add .htaccess for direct serving.
+			// Add .htaccess for direct serving (Apache: with the immutable header).
 			$htaccess = $cache_dir . '/.htaccess';
-			if ( ! file_exists( $htaccess ) ) {
+			if ( ! ( class_exists( __NAMESPACE__ . '\\TE_BrowserCache' ) && TE_BrowserCache::update_min_dir_htaccess() ) && ! file_exists( $htaccess ) ) {
 				file_put_contents( $htaccess, "# Serve directly\n<IfModule mod_rewrite.c>\nRewriteEngine Off\n</IfModule>\n" );
 			}
 

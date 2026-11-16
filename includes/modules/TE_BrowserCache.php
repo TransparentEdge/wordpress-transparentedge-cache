@@ -71,6 +71,22 @@ class TE_BrowserCache {
 	}
 
 	/**
+	 * URL path of the self-hosted Google Fonts directory. Its font files are
+	 * named font-<md5 of the versioned fonts.gstatic.com URL>.<ext>, so a name
+	 * never changes content either (the gf-*.css next to them is rebuilt in
+	 * place and is NOT immutable).
+	 *
+	 * @return string e.g. /wp-content/cache/flavor-edge/fonts/
+	 */
+	public static function fonts_path() {
+		$path = (string) wp_parse_url( content_url( TE_GoogleFonts::CACHE_DIR ), PHP_URL_PATH );
+		return '/' . trim( $path, '/' ) . '/';
+	}
+
+	/** Regex (PCRE, unanchored path suffix) matching the immutable font files. */
+	const FONT_FILE_RE = 'font-[0-9a-f]{32}\\.(woff2?|ttf|otf|eot|svg)$';
+
+	/**
 	 * Cache-Control for content-addressed files.
 	 *
 	 * @return string
@@ -131,8 +147,57 @@ class TE_BrowserCache {
 	public static function on_settings_saved( $settings = array() ) {
 		if ( self::supports_htaccess() ) {
 			self::update_htaccess();
+		} else {
+			self::write_nginx_conf();
 		}
 		self::probe();
+	}
+
+	// -------------------------------------------------------------------------
+	// nginx: rules file kept by the plugin (include it once).
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Absolute path of the nginx rules file the plugin keeps up to date. nginx
+	 * does not read per-directory files, so the server block must include it
+	 * once; after that a TTL change only needs an nginx reload, not a new copy
+	 * and paste (same approach as W3 Total Cache's nginx.conf).
+	 *
+	 * @return string
+	 */
+	public static function nginx_conf_path() {
+		return WP_CONTENT_DIR . '/cache/flavor-edge/nginx.conf';
+	}
+
+	/**
+	 * Write the nginx rules file when its content changed.
+	 *
+	 * @return bool True when the file is current.
+	 */
+	public static function write_nginx_conf() {
+		$file    = self::nginx_conf_path();
+		$content = self::generate_nginx_snippet( true );
+		if ( file_exists( $file ) && file_get_contents( $file ) === $content ) {
+			return true;
+		}
+		$dir = dirname( $file );
+		if ( ! is_dir( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
+		if ( ! is_dir( $dir ) || ! is_writable( $dir ) ) {
+			return false;
+		}
+		return TE_ObjectCache::write_atomic( $file, $content );
+	}
+
+	/**
+	 * Whether the nginx rules file exists and matches the current settings.
+	 *
+	 * @return bool
+	 */
+	public static function nginx_conf_current() {
+		$file = self::nginx_conf_path();
+		return file_exists( $file ) && file_get_contents( $file ) === self::generate_nginx_snippet( true );
 	}
 
 	// -------------------------------------------------------------------------
@@ -194,7 +259,28 @@ class TE_BrowserCache {
 
 		$rules = self::generate_htaccess_rules();
 		self::update_min_dir_htaccess();
+		self::update_fonts_dir_htaccess();
 		return insert_with_markers( $htaccess, self::HTACCESS_MARKER, explode( "\n", $rules ) );
+	}
+
+	/**
+	 * Apache: self-hosted font files (content-addressed) served for a year as
+	 * immutable; the font CSS keeps the generic static rule.
+	 *
+	 * @return bool
+	 */
+	public static function update_fonts_dir_htaccess() {
+		$dir = WP_CONTENT_DIR . '/' . TE_GoogleFonts::CACHE_DIR;
+		if ( ! is_dir( $dir ) || ! is_writable( $dir ) ) {
+			return false;
+		}
+		$content  = "# Self-hosted font files (Transparent Edge Cache): named after their source, cache for a year.\n";
+		$content .= "<IfModule mod_headers.c>\n    <FilesMatch \"^" . self::FONT_FILE_RE . "\">\n        Header set Cache-Control \"" . self::immutable_cache_control() . "\"\n    </FilesMatch>\n</IfModule>\n";
+		$file = $dir . '/.htaccess';
+		if ( file_exists( $file ) && file_get_contents( $file ) === $content ) {
+			return true;
+		}
+		return false !== file_put_contents( $file, $content );
 	}
 
 	/**
@@ -255,7 +341,7 @@ class TE_BrowserCache {
 	 *
 	 * @return string
 	 */
-	public static function generate_nginx_snippet() {
+	public static function generate_nginx_snippet( $for_file = false ) {
 		$s = TE_Settings::get_all();
 
 		$static_max_age  = (int) $s['static_max_age'];
@@ -266,9 +352,15 @@ class TE_BrowserCache {
 		$conf  = "# ============================================================\n";
 		$conf .= "# Transparent Edge Cache Plugin — Static Cache Headers\n";
 		$conf .= "# Host: $domain\n";
-		$conf .= "# Generated: " . gmdate( 'Y-m-d H:i:s' ) . " UTC\n";
-		$conf .= "#\n";
-		$conf .= "# Add this inside your server {} block in Nginx config.\n";
+		if ( $for_file ) {
+			$conf .= "# Kept up to date by the plugin. Include it ONCE in the server {} block:\n";
+			$conf .= "#   include " . self::nginx_conf_path() . ";\n";
+			$conf .= "# then: nginx -t && reload nginx. Reload again after changing the TTLs.\n";
+		} else {
+			$conf .= "# Generated: " . gmdate( 'Y-m-d H:i:s' ) . " UTC\n";
+			$conf .= "#\n";
+			$conf .= "# Add this inside your server {} block in Nginx config.\n";
+		}
 		$conf .= "# Varnish will respect these Cache-Control headers from origin.\n";
 		$conf .= "# ============================================================\n\n";
 
@@ -280,6 +372,12 @@ class TE_BrowserCache {
 
 		$conf .= "# Files generated by the plugin are named after their content: immutable.\n";
 		$conf .= "location ^~ " . self::immutable_path() . " {\n";
+		$conf .= "    add_header Cache-Control \"" . self::immutable_cache_control() . "\";\n";
+		$conf .= "    access_log off;\n";
+		$conf .= "}\n\n";
+
+		$conf .= "# Self-hosted Google Fonts files (named after their versioned source): immutable.\n";
+		$conf .= "location ~ ^" . self::fonts_path() . self::FONT_FILE_RE . " {\n";
 		$conf .= "    add_header Cache-Control \"" . self::immutable_cache_control() . "\";\n";
 		$conf .= "    access_log off;\n";
 		$conf .= "}\n\n";
@@ -321,7 +419,8 @@ class TE_BrowserCache {
 		$vcl .= "# ────────────────────────────────────────────────────────────────\n\n";
 		$vcl .= "sub vcl_backend_response {\n";
 		$vcl .= "    if (bereq.http.host == \"$domain\") {\n";
-		$vcl .= "        if (bereq.url ~ \"^$path\") {\n";
+		$fonts = str_replace( '.', '\\.', self::fonts_path() );
+		$vcl .= "        if (bereq.url ~ \"^$path\" || bereq.url ~ \"^$fonts" . self::FONT_FILE_RE . "\") {\n";
 		$vcl .= "            set beresp.ttl = {$imm}s;\n";
 		$vcl .= "            set beresp.http.Cache-Control = \"public, max-age=$imm, immutable\";\n";
 		$vcl .= "        } elsif (bereq.url ~ \"(?i)\\.(css|js|jpe?g|png|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|pdf)(\\?.*)?$\"\n";

@@ -132,6 +132,13 @@ function flavor_edge_init() {
 		if ( class_exists( 'flavor_edge\\TE_ObjectCache' ) ) {
 			\flavor_edge\TE_ObjectCache::maybe_upgrade_dropin();
 		}
+		// Scheduled event of a feature removed in an earlier version: it kept firing
+		// with no callback.
+		wp_clear_scheduled_hook( 'flavor_edge_vuln_scan' );
+		// nginx: keep the includable rules file in step with this version's rules.
+		if ( class_exists( 'flavor_edge\\TE_BrowserCache' ) && ! \flavor_edge\TE_BrowserCache::supports_htaccess() ) {
+			\flavor_edge\TE_BrowserCache::write_nginx_conf();
+		}
 		// 1.13.0 changes the surrogate-key model (listing pages now carry lst-*
 		// keys). Pages cached by an earlier version do not have them, so one soft
 		// purge lets them pick the new keys up instead of waiting for their TTL.
@@ -420,6 +427,10 @@ function flavor_edge_deactivate_single() {
 	wp_clear_scheduled_hook( 'flavor_edge_warmup_process' );
 	wp_clear_scheduled_hook( \flavor_edge\TE_Api::HEALTH_CRON_HOOK );
 	wp_clear_scheduled_hook( 'flavor_edge_generate_ucss' );
+	wp_clear_scheduled_hook( 'flavor_edge_minify_gc' );
+	wp_clear_scheduled_hook( 'flavor_edge_pc_trash_gc' );
+	wp_unschedule_hook( 'flavor_edge_gf_build' ); // scheduled with args: clear every instance.
+	wp_clear_scheduled_hook( 'flavor_edge_vuln_scan' ); // left by versions before the scanner was removed.
 
 	// Remove .htaccess rules.
 	if ( class_exists( 'flavor_edge\\TE_BrowserCache' ) ) {

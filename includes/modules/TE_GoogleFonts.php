@@ -231,6 +231,9 @@ class TE_GoogleFonts {
 		// Atomic write so a request reading the CSS never sees it half-written.
 		TE_ObjectCache::write_atomic( $css_file, $css );
 		delete_transient( $lock );
+		if ( class_exists( __NAMESPACE__ . '\\TE_BrowserCache' ) && TE_BrowserCache::supports_htaccess() ) {
+			TE_BrowserCache::update_fonts_dir_htaccess(); // Apache: font files immutable for a year.
+		}
 	}
 
 	/**
