@@ -99,7 +99,65 @@ class TE_Admin {
 				'error'        => __( 'An error occurred.', 'flavor-edge-cache' ),
 				'confirmPurge' => __( 'Are you sure you want to purge all cached content?', 'flavor-edge-cache' ),
 			),
+			'i18n'    => self::js_strings(),
 		) );
+	}
+
+	/**
+	 * UI strings used by admin.js, keyed by their English text (admin.js looks
+	 * them up with t() / tf()). %s placeholders are filled in by tf().
+	 *
+	 * @return array
+	 */
+	private static function js_strings() {
+		// phpcs:disable WordPress.WP.I18n.MissingTranslatorsComment
+		return array(
+			'%s errors' => __( '%s errors', 'flavor-edge-cache' ),
+			'AJAX Error: ' => __( 'AJAX Error: ', 'flavor-edge-cache' ),
+			'Check cookies now' => __( 'Check cookies now', 'flavor-edge-cache' ),
+			'Checking...' => __( 'Checking...', 'flavor-edge-cache' ),
+			'Clear Minify Cache' => __( 'Clear Minify Cache', 'flavor-edge-cache' ),
+			'Cleared %s files' => __( 'Cleared %s files', 'flavor-edge-cache' ),
+			'Clearing...' => __( 'Clearing...', 'flavor-edge-cache' ),
+			'Completed: %s URLs warmed' => __( 'Completed: %s URLs warmed', 'flavor-edge-cache' ),
+			'Connect & Configure' => __( 'Connect & Configure', 'flavor-edge-cache' ),
+			'Connecting...' => __( 'Connecting...', 'flavor-edge-cache' ),
+			'Copied!' => __( 'Copied!', 'flavor-edge-cache' ),
+			'Disable' => __( 'Disable', 'flavor-edge-cache' ),
+			'Disable Object Cache? This will remove wp-content/object-cache.php.' => __( 'Disable Object Cache? This will remove wp-content/object-cache.php.', 'flavor-edge-cache' ),
+			'Disable the origin page cache? This removes advanced-cache.php and unsets our WP_CACHE define.' => __( 'Disable the origin page cache? This removes advanced-cache.php and unsets our WP_CACHE define.', 'flavor-edge-cache' ),
+			'Disabling...' => __( 'Disabling...', 'flavor-edge-cache' ),
+			'Done!' => __( 'Done!', 'flavor-edge-cache' ),
+			'Enable' => __( 'Enable', 'flavor-edge-cache' ),
+			'Enable ' => __( 'Enable ', 'flavor-edge-cache' ),
+			'Enable %s Object Cache? This will create wp-content/object-cache.php.' => __( 'Enable %s Object Cache? This will create wp-content/object-cache.php.', 'flavor-edge-cache' ),
+			'Enable the origin page cache? This writes wp-content/advanced-cache.php and sets WP_CACHE in wp-config.php.' => __( 'Enable the origin page cache? This writes wp-content/advanced-cache.php and sets WP_CACHE in wp-config.php.', 'flavor-edge-cache' ),
+			'Enabling...' => __( 'Enabling...', 'flavor-edge-cache' ),
+			'Error' => __( 'Error', 'flavor-edge-cache' ),
+			'Error enabling Object Cache' => __( 'Error enabling Object Cache', 'flavor-edge-cache' ),
+			'Error enabling page cache' => __( 'Error enabling page cache', 'flavor-edge-cache' ),
+			'Error replacing Object Cache' => __( 'Error replacing Object Cache', 'flavor-edge-cache' ),
+			'Error: ' => __( 'Error: ', 'flavor-edge-cache' ),
+			'Flush' => __( 'Flush', 'flavor-edge-cache' ),
+			'Flushed' => __( 'Flushed', 'flavor-edge-cache' ),
+			'Flushing...' => __( 'Flushing...', 'flavor-edge-cache' ),
+			'Please fill in all credentials.' => __( 'Please fill in all credentials.', 'flavor-edge-cache' ),
+			'Preload %s' => __( 'Preload %s', 'flavor-edge-cache' ),
+			'Preload Cache via Sitemap' => __( 'Preload Cache via Sitemap', 'flavor-edge-cache' ),
+			'Preload stopped.' => __( 'Preload stopped.', 'flavor-edge-cache' ),
+			'Queuing URLs...' => __( 'Queuing URLs...', 'flavor-edge-cache' ),
+			'Replace the existing object-cache.php from another plugin with Transparent Edge (%s)? The current drop-in will be backed up to wp-content/cache/flavor-edge/ first.' => __( 'Replace the existing object-cache.php from another plugin with Transparent Edge (%s)? The current drop-in will be backed up to wp-content/cache/flavor-edge/ first.', 'flavor-edge-cache' ),
+			'Replace with ours' => __( 'Replace with ours', 'flavor-edge-cache' ),
+			'Replacing...' => __( 'Replacing...', 'flavor-edge-cache' ),
+			'Request failed' => __( 'Request failed', 'flavor-edge-cache' ),
+			'Stop Preload' => __( 'Stop Preload', 'flavor-edge-cache' ),
+			'Stopping...' => __( 'Stopping...', 'flavor-edge-cache' ),
+			'Warming cache...' => __( 'Warming cache...', 'flavor-edge-cache' ),
+			'Warming: %1$s/%2$s (%3$s%)' => __( 'Warming: %1$s/%2$s (%3$s%)', 'flavor-edge-cache' ),
+			'check browser console' => __( 'check browser console', 'flavor-edge-cache' ),
+			'in %ss' => __( 'in %ss', 'flavor-edge-cache' ),
+		);
+		// phpcs:enable
 	}
 
 	/**

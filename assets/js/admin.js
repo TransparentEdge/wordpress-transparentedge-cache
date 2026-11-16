@@ -12,6 +12,17 @@
 
     var FE = window.flavorEdge;
 
+    // Translations: FE.i18n maps each English UI string to its translation
+    // (built server-side with __() in TE_Admin::js_strings()). %s / %1$s are
+    // replaced in order by tf().
+    function t(str) { return (FE.i18n && FE.i18n[str]) || str; }
+    function tf(str) {
+        var args = Array.prototype.slice.call(arguments, 1), i = 0;
+        return t(str).replace(/%(\d+\$)?s/g, function (m, pos) {
+            return pos ? args[parseInt(pos, 10) - 1] : args[i++];
+        });
+    }
+
     console.log('[TE Cache] Admin JS loaded. AJAX URL:', FE.ajaxUrl);
 
     // -------------------------------------------------------------------------
@@ -60,7 +71,7 @@
         }).fail(function (xhr, status, error) {
             console.error('[TE Cache] Test connection AJAX error:', status, error, xhr.responseText);
             $btn.prop('disabled', false);
-            $status.text('✗ AJAX Error: ' + error).addClass('te-status-error');
+            $status.text('✗ ' + t('AJAX Error: ') + error).addClass('te-status-error');
         });
     });
 
@@ -126,7 +137,7 @@
         }).fail(function (xhr, status, error) {
             console.error('[TE Cache] Save AJAX error:', status, error, xhr.responseText);
             $btn.prop('disabled', false);
-            $status.text('✗ AJAX Error: ' + error + ' — check browser console').addClass('te-status-error');
+            $status.text('✗ ' + t('AJAX Error: ') + error + ' — ' + t('check browser console')).addClass('te-status-error');
         });
     });
 
@@ -154,7 +165,7 @@
             setTimeout(function () { $btn.text(originalText); }, 3000);
         }).fail(function (xhr, status, error) {
             console.error('[TE Cache] Purge AJAX error:', status, error);
-            $btn.prop('disabled', false).text('✗ Error: ' + error);
+            $btn.prop('disabled', false).text('✗ ' + t('Error: ') + error);
             setTimeout(function () { $btn.text(originalText); }, 3000);
         });
     });
@@ -187,7 +198,7 @@
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function () {
-                $btn.text('✓ Copied!');
+                $btn.text('✓ ' + t('Copied!'));
                 setTimeout(function () { $btn.text(originalText); }, 2000);
             });
         } else {
@@ -197,7 +208,7 @@
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            $btn.text('✓ Copied!');
+            $btn.text('✓ ' + t('Copied!'));
             setTimeout(function () { $btn.text(originalText); }, 2000);
         }
     });
@@ -227,26 +238,26 @@
         };
 
         if (!data.company_id || !data.client_id || !data.client_secret) {
-            $status.text('Please fill in all credentials.').addClass('te-status-error');
+            $status.text(t('Please fill in all credentials.')).addClass('te-status-error');
             return;
         }
 
-        $btn.prop('disabled', true).text('Connecting...');
+        $btn.prop('disabled', true).text(t('Connecting...'));
         $status.text('').removeClass('te-status-error te-status-success');
 
         $.post(FE.ajaxUrl, data, function (res) {
             console.log('[TE Cache] Wizard response:', res);
             $btn.prop('disabled', false);
             if (res && res.success) {
-                $status.text('✓ ' + (res.data || 'Done!')).addClass('te-status-success');
+                $status.text('✓ ' + (res.data || t('Done!'))).addClass('te-status-success');
                 setTimeout(function () { location.reload(); }, 1500);
             } else {
-                $status.text('✗ ' + (res && res.data ? res.data : 'Error')).addClass('te-status-error');
-                $btn.text('Connect & Configure');
+                $status.text('✗ ' + (res && res.data ? res.data : t('Error'))).addClass('te-status-error');
+                $btn.text(t('Connect & Configure'));
             }
         }).fail(function (xhr, status, error) {
             console.error('[TE Cache] Wizard error:', error);
-            $btn.prop('disabled', false).text('Connect & Configure');
+            $btn.prop('disabled', false).text(t('Connect & Configure'));
             $status.text('✗ ' + error).addClass('te-status-error');
         });
     });
@@ -271,7 +282,7 @@
         var $stop   = $('#te-preload-stop');
         var $status = $('#te-preload-status');
 
-        $btn.prop('disabled', true).text('Queuing URLs...');
+        $btn.prop('disabled', true).text(t('Queuing URLs...'));
         $status.text('');
 
         // Step 1: Queue URLs (returns immediately).
@@ -281,17 +292,17 @@
         }, function (res) {
             console.log('[TE Cache] Preload queued:', res);
             if (res && res.success) {
-                $btn.text('Warming cache...').hide();
+                $btn.text(t('Warming cache...')).hide();
                 $stop.show();
                 $status.text(res.message).css('color', '#155724');
                 startPreloadPolling($btn, $stop, $status);
             } else {
-                $btn.prop('disabled', false).text('🔄 Preload Cache via Sitemap');
-                $status.text('✗ ' + (res && res.message ? res.message : 'Error')).css('color', '#721c24');
+                $btn.prop('disabled', false).text('🔄 ' + t('Preload Cache via Sitemap'));
+                $status.text('✗ ' + (res && res.message ? res.message : t('Error'))).css('color', '#721c24');
             }
         }).fail(function () {
-            $btn.prop('disabled', false).text('🔄 Preload Cache via Sitemap');
-            $status.text('✗ Request failed').css('color', '#721c24');
+            $btn.prop('disabled', false).text('🔄 ' + t('Preload Cache via Sitemap'));
+            $status.text('✗ ' + t('Request failed')).css('color', '#721c24');
         });
     });
 
@@ -301,16 +312,16 @@
         var $stop   = $(this);
         var $status = $('#te-preload-status');
 
-        $stop.prop('disabled', true).text('Stopping...');
+        $stop.prop('disabled', true).text(t('Stopping...'));
 
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_preload_stop',
             nonce:  FE.nonce
         }, function () {
             if (preloadTimer) { clearInterval(preloadTimer); preloadTimer = null; }
-            $stop.hide().prop('disabled', false).text('⏹ Stop Preload');
-            $btn.show().prop('disabled', false).text('🔄 Preload Cache via Sitemap');
-            $status.text('Preload stopped.').css('color', '#856404');
+            $stop.hide().prop('disabled', false).text('⏹ ' + t('Stop Preload'));
+            $btn.show().prop('disabled', false).text('🔄 ' + t('Preload Cache via Sitemap'));
+            $status.text(t('Preload stopped.')).css('color', '#856404');
             setTimeout(function () { $status.text(''); }, 5000);
         });
     });
@@ -329,22 +340,22 @@
                 var pct = s.total > 0 ? Math.round((s.processed / s.total) * 100) : 0;
 
                 if (s.status === 'running') {
-                    $status.text('Warming: ' + s.processed + '/' + s.total + ' (' + pct + '%)' + (s.errors > 0 ? ' — ' + s.errors + ' errors' : '')).css('color', '#555');
+                    $status.text(tf('Warming: %1$s/%2$s (%3$s%)', s.processed, s.total, pct) + (s.errors > 0 ? ' — ' + tf('%s errors', s.errors) : '')).css('color', '#555');
                 } else if (s.status === 'completed') {
                     clearInterval(preloadTimer);
                     preloadTimer = null;
-                    var elapsed = s.elapsed ? ' in ' + s.elapsed + 's' : '';
+                    var elapsed = s.elapsed ? ' ' + tf('in %ss', s.elapsed) : '';
                     $stop.hide();
-                    $btn.show().prop('disabled', false).text('🔄 Preload Cache via Sitemap');
-                    $status.text('✓ Completed: ' + s.processed + ' URLs warmed' + elapsed + (s.errors > 0 ? ' (' + s.errors + ' errors)' : '')).css('color', '#155724');
+                    $btn.show().prop('disabled', false).text('🔄 ' + t('Preload Cache via Sitemap'));
+                    $status.text('✓ ' + tf('Completed: %s URLs warmed', s.processed) + elapsed + (s.errors > 0 ? ' (' + tf('%s errors', s.errors) + ')' : '')).css('color', '#155724');
                     setTimeout(function () { $status.text(''); }, 10000);
                 } else {
                     // Stopped or unknown.
                     clearInterval(preloadTimer);
                     preloadTimer = null;
                     $stop.hide();
-                    $btn.show().prop('disabled', false).text('🔄 Preload Cache via Sitemap');
-                    $status.text('Preload ' + s.status).css('color', '#856404');
+                    $btn.show().prop('disabled', false).text('🔄 ' + t('Preload Cache via Sitemap'));
+                    $status.text(tf('Preload %s', s.status)).css('color', '#856404');
                 }
             });
         }, 3000);
@@ -356,9 +367,9 @@
     $(document).on('click', '.te-enable-object-cache', function () {
         var $btn = $(this);
         var backend = $btn.data('backend');
-        if (!confirm('Enable ' + backend + ' Object Cache? This will create wp-content/object-cache.php.')) return;
+        if (!confirm(tf('Enable %s Object Cache? This will create wp-content/object-cache.php.', backend))) return;
 
-        $btn.prop('disabled', true).text('Enabling...');
+        $btn.prop('disabled', true).text(t('Enabling...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_enable_object_cache',
             nonce:  FE.nonce,
@@ -368,8 +379,8 @@
             if (res && res.success) {
                 location.reload();
             } else {
-                alert(res && res.message ? res.message : 'Error enabling Object Cache');
-                $btn.text('Enable ' + backend.charAt(0).toUpperCase() + backend.slice(1));
+                alert(res && res.message ? res.message : t('Error enabling Object Cache'));
+                $btn.text(t('Enable ') + backend.charAt(0).toUpperCase() + backend.slice(1));
             }
         });
     });
@@ -377,9 +388,9 @@
     $(document).on('click', '.te-replace-object-cache', function () {
         var $btn = $(this);
         var backend = $btn.data('backend');
-        if (!confirm('Replace the existing object-cache.php from another plugin with Transparent Edge (' + backend + ')? The current drop-in will be backed up to wp-content/cache/flavor-edge/ first.')) return;
+        if (!confirm(tf('Replace the existing object-cache.php from another plugin with Transparent Edge (%s)? The current drop-in will be backed up to wp-content/cache/flavor-edge/ first.', backend))) return;
 
-        $btn.prop('disabled', true).text('Replacing...');
+        $btn.prop('disabled', true).text(t('Replacing...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_replace_object_cache',
             nonce:  FE.nonce,
@@ -389,16 +400,16 @@
             if (res && res.success) {
                 location.reload();
             } else {
-                alert(res && res.message ? res.message : 'Error replacing Object Cache');
-                $btn.text('Replace with ours');
+                alert(res && res.message ? res.message : t('Error replacing Object Cache'));
+                $btn.text(t('Replace with ours'));
             }
         });
     });
 
     $(document).on('click', '.te-disable-object-cache', function () {
-        if (!confirm('Disable Object Cache? This will remove wp-content/object-cache.php.')) return;
+        if (!confirm(t('Disable Object Cache? This will remove wp-content/object-cache.php.'))) return;
         var $btn = $(this);
-        $btn.prop('disabled', true).text('Disabling...');
+        $btn.prop('disabled', true).text(t('Disabling...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_disable_object_cache',
             nonce:  FE.nonce
@@ -406,23 +417,23 @@
             if (res && res.success) {
                 location.reload();
             } else {
-                $btn.prop('disabled', false).text('Disable');
-                alert(res && res.message ? res.message : 'Error');
+                $btn.prop('disabled', false).text(t('Disable'));
+                alert(res && res.message ? res.message : t('Error'));
             }
         });
     });
 
     $(document).on('click', '.te-flush-object-cache', function () {
         var $btn = $(this);
-        $btn.prop('disabled', true).text('Flushing...');
+        $btn.prop('disabled', true).text(t('Flushing...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_flush_object_cache',
             nonce:  FE.nonce
         }, function (res) {
-            $btn.prop('disabled', false).text('Flush');
+            $btn.prop('disabled', false).text(t('Flush'));
             if (res && res.success) {
-                $btn.text('✓ Flushed');
-                setTimeout(function () { $btn.text('Flush'); }, 2000);
+                $btn.text('✓ ' + t('Flushed'));
+                setTimeout(function () { $btn.text(t('Flush')); }, 2000);
             }
         });
     });
@@ -432,8 +443,8 @@
     // -------------------------------------------------------------------------
     $(document).on('click', '.te-enable-page-cache', function () {
         var $btn = $(this);
-        if (!confirm('Enable the origin page cache? This writes wp-content/advanced-cache.php and sets WP_CACHE in wp-config.php.')) return;
-        $btn.prop('disabled', true).text('Enabling...');
+        if (!confirm(t('Enable the origin page cache? This writes wp-content/advanced-cache.php and sets WP_CACHE in wp-config.php.'))) return;
+        $btn.prop('disabled', true).text(t('Enabling...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_enable_page_cache',
             nonce:  FE.nonce
@@ -442,16 +453,16 @@
             if (res && res.success) {
                 location.reload();
             } else {
-                alert(res && res.message ? res.message : 'Error enabling page cache');
-                $btn.text('Enable');
+                alert(res && res.message ? res.message : t('Error enabling page cache'));
+                $btn.text(t('Enable'));
             }
         });
     });
 
     $(document).on('click', '.te-disable-page-cache', function () {
-        if (!confirm('Disable the origin page cache? This removes advanced-cache.php and unsets our WP_CACHE define.')) return;
+        if (!confirm(t('Disable the origin page cache? This removes advanced-cache.php and unsets our WP_CACHE define.'))) return;
         var $btn = $(this);
-        $btn.prop('disabled', true).text('Disabling...');
+        $btn.prop('disabled', true).text(t('Disabling...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_disable_page_cache',
             nonce:  FE.nonce
@@ -459,23 +470,23 @@
             if (res && res.success) {
                 location.reload();
             } else {
-                $btn.prop('disabled', false).text('Disable');
-                alert(res && res.message ? res.message : 'Error');
+                $btn.prop('disabled', false).text(t('Disable'));
+                alert(res && res.message ? res.message : t('Error'));
             }
         });
     });
 
     $(document).on('click', '.te-flush-page-cache', function () {
         var $btn = $(this);
-        $btn.prop('disabled', true).text('Flushing...');
+        $btn.prop('disabled', true).text(t('Flushing...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_flush_page_cache',
             nonce:  FE.nonce
         }, function (res) {
-            $btn.prop('disabled', false).text('Flush');
+            $btn.prop('disabled', false).text(t('Flush'));
             if (res && res.success) {
-                $btn.text('✓ Flushed');
-                setTimeout(function () { $btn.text('Flush'); }, 2000);
+                $btn.text('✓ ' + t('Flushed'));
+                setTimeout(function () { $btn.text(t('Flush')); }, 2000);
             }
         });
     });
@@ -486,13 +497,13 @@
     $(document).on('click', '#te-probe-cookies', function () {
         var $btn = $(this);
         var $out = $('#te-cookie-probe-result');
-        $btn.prop('disabled', true).text('Checking...');
+        $btn.prop('disabled', true).text(t('Checking...'));
         $out.html('');
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_probe_cookies',
             nonce:  FE.nonce
         }, function (res) {
-            $btn.prop('disabled', false).text('Check cookies now');
+            $btn.prop('disabled', false).text(t('Check cookies now'));
             if (!res || !res.success || !res.data) {
                 $out.html('<span style="color:#b32d2e;">Probe failed</span>');
                 return;
@@ -520,17 +531,17 @@
     // -------------------------------------------------------------------------
     $(document).on('click', '.te-clear-minify-cache', function () {
         var $btn = $(this);
-        $btn.prop('disabled', true).text('Clearing...');
+        $btn.prop('disabled', true).text(t('Clearing...'));
         $.post(FE.ajaxUrl, {
             action: 'flavor_edge_clear_minify_cache',
             nonce:  FE.nonce
         }, function (res) {
             $btn.prop('disabled', false);
             if (res && res.success && res.data) {
-                $btn.text('✓ Cleared ' + res.data.files_deleted + ' files');
+                $btn.text('✓ ' + tf('Cleared %s files', res.data.files_deleted));
                 setTimeout(function () { location.reload(); }, 2000);
             } else {
-                $btn.text('Clear Minify Cache');
+                $btn.text(t('Clear Minify Cache'));
             }
         });
     });

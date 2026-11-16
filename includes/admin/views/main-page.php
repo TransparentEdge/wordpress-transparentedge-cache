@@ -1200,8 +1200,16 @@ defined( 'ABSPATH' ) || exit;
 						?>
 						<tr>
 							<td><?php echo esc_html( wp_date( 'Y-m-d H:i:s', (int) ( $fe_e['t'] ?? 0 ) ) ); ?></td>
-							<td><?php echo esc_html( (string) ( $fe_e['ctx'] ?? '' ) ); ?></td>
-							<td><?php echo esc_html( (string) ( $fe_e['kind'] ?? '' ) . ( $fe_mode ? ' · ' . implode( ', ', $fe_mode ) : '' ) ); ?></td>
+							<td><?php echo esc_html( \flavor_edge\TE_Api::context_label( (string) ( $fe_e['ctx'] ?? '' ) ) ); ?></td>
+							<td><?php
+							$fe_kinds = array(
+								'tags' => __( 'tags', 'flavor-edge-cache' ),
+								'urls' => __( 'URLs', 'flavor-edge-cache' ),
+								'ban'  => __( 'ban', 'flavor-edge-cache' ),
+							);
+							$fe_kind  = (string) ( $fe_e['kind'] ?? '' );
+							echo esc_html( ( $fe_kinds[ $fe_kind ] ?? $fe_kind ) . ( $fe_mode ? ' · ' . implode( ', ', $fe_mode ) : '' ) );
+							?></td>
 							<td><code style="white-space:normal;word-break:break-all;"><?php echo esc_html( implode( ' ', $fe_items ) . $fe_more ); ?></code></td>
 							<td>
 								<?php if ( ! empty( $fe_e['ok'] ) ) : ?>

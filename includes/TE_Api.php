@@ -246,7 +246,83 @@ class TE_Api {
 		return $result;
 	}
 
-	/**
+		/**
+	 * Human label, in the site's language, for a stored purge-log context. The
+	 * context is stored in English (stable data, also printed by WP-CLI) and
+	 * translated only for display.
+	 *
+	 * @param string $ctx Stored context.
+	 * @return string
+	 */
+	public static function context_label( $ctx ) {
+		$ctx   = (string) $ctx;
+		$fixed = array(
+			'auto'                               => __( 'auto', 'flavor-edge-cache' ),
+			'request'                            => __( 'request', 'flavor-edge-cache' ),
+			'cron'                               => __( 'cron', 'flavor-edge-cache' ),
+			'wp-cli'                             => 'WP-CLI',
+			'preload'                            => __( 'preload', 'flavor-edge-cache' ),
+			'dashboard: purge all'               => __( 'dashboard: purge all', 'flavor-edge-cache' ),
+			'admin bar: purge all'               => __( 'admin bar: purge all', 'flavor-edge-cache' ),
+			'theme/plugin update'                => __( 'theme/plugin update', 'flavor-edge-cache' ),
+			'speculation rules changed'          => __( 'speculation rules changed', 'flavor-edge-cache' ),
+			'upgrade to 1.13.0: new cache keys'  => __( 'upgrade to 1.13.0: new cache keys', 'flavor-edge-cache' ),
+			'widgets updated'                    => __( 'widgets updated', 'flavor-edge-cache' ),
+			'theme switched'                     => __( 'theme switched', 'flavor-edge-cache' ),
+		);
+		if ( isset( $fixed[ $ctx ] ) ) {
+			return $fixed[ $ctx ];
+		}
+		$out = $ctx;
+		if ( 0 === strpos( $out, 'auto: ' ) ) {
+			$out = $fixed['auto'] . ': ' . substr( $out, 6 );
+		}
+		// One pattern per event the invalidation module notes (see TE_Invalidation::note()).
+		$rules = array(
+			/* translators: %d: post ID */
+			'/^admin bar: purge page #(\d+)$/'          => __( 'admin bar: purge page #%1$s', 'flavor-edge-cache' ),
+			/* translators: 1: post type, 2: post ID */
+			'/(\S+) #(\d+) published\/updated/'         => __( '%1$s #%2$s published/updated', 'flavor-edge-cache' ),
+			/* translators: 1: post type, 2: post ID */
+			'/(\S+) #(\d+) unpublished\/deleted/'       => __( '%1$s #%2$s unpublished/deleted', 'flavor-edge-cache' ),
+			/* translators: %s: comment ID */
+			'/comment #(\d+) edited/'                   => __( 'comment #%1$s edited', 'flavor-edge-cache' ),
+			/* translators: 1: comment ID, 2: new comment status */
+			'/comment #(\d+) (approved|unapproved|spam|trash|hold|approve)\b/' => __( 'comment #%1$s %2$s', 'flavor-edge-cache' ),
+			/* translators: %s: comment ID */
+			'/comment #(\d+)(?=;|$)/'                   => __( 'comment #%1$s', 'flavor-edge-cache' ),
+			/* translators: %s: menu ID */
+			'/menu #(\d+) updated/'                     => __( 'menu #%1$s updated', 'flavor-edge-cache' ),
+			/* translators: %s: plugin file */
+			'/plugin activated: (\S+)/'                 => __( 'plugin activated: %1$s', 'flavor-edge-cache' ),
+			/* translators: %s: plugin file */
+			'/plugin deactivated: (\S+)/'               => __( 'plugin deactivated: %1$s', 'flavor-edge-cache' ),
+			/* translators: 1: taxonomy, 2: term ID */
+			'/(\S+) #(\d+) edited/'                     => __( '%1$s #%2$s edited', 'flavor-edge-cache' ),
+			/* translators: 1: taxonomy, 2: term ID */
+			'/(\S+) #(\d+) deleted/'                    => __( '%1$s #%2$s deleted', 'flavor-edge-cache' ),
+			/* translators: %s: product ID */
+			'/stock change #(\d+)/'                     => __( 'stock change #%1$s', 'flavor-edge-cache' ),
+			/* translators: %s: attachment ID */
+			'/media #(\d+)/'                            => __( 'media #%1$s', 'flavor-edge-cache' ),
+			/* translators: %s: product ID */
+			'/product #(\d+)/'                          => __( 'product #%1$s', 'flavor-edge-cache' ),
+			/* translators: %s: number of further events */
+			'/\+(\d+) more/'                            => __( '+%1$s more', 'flavor-edge-cache' ),
+		);
+		foreach ( $rules as $re => $fmt ) {
+			$out = preg_replace_callback(
+				$re,
+				function ( $m ) use ( $fmt ) {
+					return vsprintf( $fmt, array_slice( $m, 1 ) );
+				},
+				$out
+			);
+		}
+		return $out;
+	}
+
+/**
 	 * Most recent purge-log entries, newest first.
 	 *
 	 * @param int $limit Max entries.
@@ -335,12 +411,12 @@ class TE_Api {
 	private static function purge_urls_raw( $urls, $soft = true, $refetch = false, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
-			return array( 'success' => false, 'message' => 'No valid API token', 'urls_sent' => 0 );
+			return array( 'success' => false, 'message' => __( 'No valid API token', 'flavor-edge-cache' ), 'urls_sent' => 0 );
 		}
 
 		$company_id = self::get_credential( 'company_id' );
 		if ( empty( $company_id ) ) {
-			return array( 'success' => false, 'message' => 'Company ID not configured', 'urls_sent' => 0 );
+			return array( 'success' => false, 'message' => __( 'Company ID not configured', 'flavor-edge-cache' ), 'urls_sent' => 0 );
 		}
 
 		// Filter and deduplicate valid URLs.
@@ -349,7 +425,7 @@ class TE_Api {
 		} ) );
 
 		if ( empty( $valid_urls ) ) {
-			return array( 'success' => false, 'message' => 'No valid URLs to purge', 'urls_sent' => 0 );
+			return array( 'success' => false, 'message' => __( 'No valid URLs to purge', 'flavor-edge-cache' ), 'urls_sent' => 0 );
 		}
 
 		$endpoint = sprintf( '%s/v1/companies/%s/invalidate/', FLAVOR_EDGE_API_BASE, $company_id );
@@ -388,7 +464,8 @@ class TE_Api {
 
 		return array(
 			'success'     => $ok,
-			'message'     => $ok ? 'Purge successful' : 'Purge failed (HTTP ' . $code . ')',
+			/* translators: %d: HTTP status code */
+			'message'     => $ok ? __( 'Purge successful', 'flavor-edge-cache' ) : sprintf( __( 'Purge failed (HTTP %d)', 'flavor-edge-cache' ), $code ),
 			'urls_sent'   => count( $valid_urls ),
 			'status'      => $code,
 			'retry_after' => $retry_after,
@@ -436,19 +513,19 @@ class TE_Api {
 	public static function prefetch( $urls ) {
 		$token = self::get_token();
 		if ( ! $token ) {
-			return array( 'success' => false, 'message' => 'No valid API token', 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+			return array( 'success' => false, 'message' => __( 'No valid API token', 'flavor-edge-cache' ), 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
 		}
 
 		$company_id = self::get_credential( 'company_id' );
 		if ( empty( $company_id ) ) {
-			return array( 'success' => false, 'message' => 'Company ID not configured', 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+			return array( 'success' => false, 'message' => __( 'Company ID not configured', 'flavor-edge-cache' ), 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
 		}
 
 		$valid_urls = array_values( array_unique( array_filter( (array) $urls, function ( $url ) {
 			return filter_var( $url, FILTER_VALIDATE_URL );
 		} ) ) );
 		if ( empty( $valid_urls ) ) {
-			return array( 'success' => false, 'message' => 'No valid URLs to prefetch', 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
+			return array( 'success' => false, 'message' => __( 'No valid URLs to prefetch', 'flavor-edge-cache' ), 'status' => 0, 'urls_sent' => 0, 'retry_after' => 0 );
 		}
 
 		$endpoint = sprintf( '%s/v1/companies/%s/prefetch/', FLAVOR_EDGE_API_BASE, $company_id );
@@ -471,7 +548,8 @@ class TE_Api {
 
 		return array(
 			'success'     => ( 200 === $code || 206 === $code ),
-			'message'     => ( 200 === $code || 206 === $code ) ? 'Prefetch queued' : 'Prefetch failed (HTTP ' . $code . ')',
+			/* translators: %d: HTTP status code */
+			'message'     => ( 200 === $code || 206 === $code ) ? __( 'Prefetch queued', 'flavor-edge-cache' ) : sprintf( __( 'Prefetch failed (HTTP %d)', 'flavor-edge-cache' ), $code ),
 			'status'      => $code,
 			'urls_sent'   => count( $valid_urls ),
 			'retry_after' => $retry_after,
@@ -488,17 +566,17 @@ class TE_Api {
 	private static function purge_tags_raw( $tags, $soft = true, $async = false ) {
 		$token = self::get_token();
 		if ( ! $token ) {
-			return array( 'success' => false, 'message' => 'No valid API token' );
+			return array( 'success' => false, 'message' => __( 'No valid API token', 'flavor-edge-cache' ) );
 		}
 
 		$company_id = self::get_credential( 'company_id' );
 		if ( empty( $company_id ) ) {
-			return array( 'success' => false, 'message' => 'Company ID not configured' );
+			return array( 'success' => false, 'message' => __( 'Company ID not configured', 'flavor-edge-cache' ) );
 		}
 
 		$tags = array_unique( array_filter( $tags ) );
 		if ( empty( $tags ) ) {
-			return array( 'success' => false, 'message' => 'No tags to purge' );
+			return array( 'success' => false, 'message' => __( 'No tags to purge', 'flavor-edge-cache' ) );
 		}
 
 		$endpoint = sprintf( '%s/v1/companies/%s/tag_invalidate/', FLAVOR_EDGE_API_BASE, $company_id );
@@ -526,7 +604,8 @@ class TE_Api {
 
 		return array(
 			'success' => 200 === $code,
-			'message' => 200 === $code ? 'Tag purge successful' : 'Tag purge failed (HTTP ' . $code . ')',
+			/* translators: %d: HTTP status code */
+			'message' => 200 === $code ? __( 'Tag purge successful', 'flavor-edge-cache' ) : sprintf( __( 'Tag purge failed (HTTP %d)', 'flavor-edge-cache' ), $code ),
 		);
 	}
 
@@ -539,7 +618,7 @@ class TE_Api {
 	private static function ban_raw( $url_pattern ) {
 		$token = self::get_token();
 		if ( ! $token ) {
-			return array( 'success' => false, 'message' => 'No valid API token' );
+			return array( 'success' => false, 'message' => __( 'No valid API token', 'flavor-edge-cache' ) );
 		}
 
 		$company_id = self::get_credential( 'company_id' );

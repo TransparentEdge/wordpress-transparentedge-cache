@@ -1,42 +1,39 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Transparent Edge Cache 1.8.0\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-21 16:09+0000\n"
-"Language: \n"
+"Project-Id-Version: Transparent Edge Cache 1.13.1\n"
+"POT-Creation-Date: 2026-11-16 11:46+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: flavor-edge-cache\n"
 
-#: transparent-edge-cache.php:162
+#: transparent-edge-cache.php:240
 msgid "Transparent Edge Cache — cache fragmentation fixed"
 msgstr ""
 
-#: transparent-edge-cache.php:163
+#: transparent-edge-cache.php:241
 msgid "This update turned off Vary: X-Device and Vary: Accept-Language, which were splitting your edge cache into extra copies without serving different content (they were hurting your hit ratio). If your site genuinely serves different HTML for the same URL per device or per browser language, you can switch them back on under TE Cache → Cache."
 msgstr ""
 
-#: transparent-edge-cache.php:179
+#: transparent-edge-cache.php:257
 msgid "Every 30 minutes (Transparent Edge)"
 msgstr ""
 
-#: transparent-edge-cache.php:300
+#: transparent-edge-cache.php:378
 msgid "Transparent Edge Cache — Write permissions required"
 msgstr ""
 
-#: transparent-edge-cache.php:301
+#: transparent-edge-cache.php:379
 msgid "The following directories are not writable. CSS/JS combine and Google Fonts self-hosting will not work until this is resolved:"
 msgstr ""
 
-#: transparent-edge-cache.php:303
+#: transparent-edge-cache.php:381
 msgid "After fixing permissions, deactivate and reactivate the plugin to dismiss this notice."
 msgstr ""
 
-#: includes/modules/TE_Dashboard.php:45 includes/admin/views/main-page.php:19
-#: includes/admin/TE_Admin.php:47
+#: includes/modules/TE_Dashboard.php:45 includes/admin/views/main-page.php:19 includes/admin/TE_Admin.php:47
 msgid "Transparent Edge Cache"
 msgstr ""
 
@@ -100,15 +97,15 @@ msgstr ""
 msgid "Delay JS"
 msgstr ""
 
-#: includes/modules/TE_Dashboard.php:163 includes/admin/views/main-page.php:801
+#: includes/modules/TE_Dashboard.php:163 includes/admin/views/main-page.php:845
 msgid "Defer JS"
 msgstr ""
 
-#: includes/modules/TE_Dashboard.php:164 includes/admin/views/main-page.php:835
+#: includes/modules/TE_Dashboard.php:164 includes/admin/views/main-page.php:886
 msgid "Lazy Load Images"
 msgstr ""
 
-#: includes/modules/TE_Dashboard.php:165 includes/admin/views/main-page.php:842
+#: includes/modules/TE_Dashboard.php:165 includes/admin/views/main-page.php:893
 msgid "Lazy Load Iframes"
 msgstr ""
 
@@ -116,11 +113,11 @@ msgstr ""
 msgid "Preload LCP"
 msgstr ""
 
-#: includes/modules/TE_Dashboard.php:167 includes/admin/views/main-page.php:879
+#: includes/modules/TE_Dashboard.php:167 includes/admin/views/main-page.php:930
 msgid "Self-host Google Fonts"
 msgstr ""
 
-#: includes/modules/TE_Dashboard.php:168 includes/admin/views/main-page.php:675
+#: includes/modules/TE_Dashboard.php:168 includes/admin/views/main-page.php:719
 msgid "i3 Image Optimization"
 msgstr ""
 
@@ -128,27 +125,27 @@ msgstr ""
 msgid "Sitemap Preload"
 msgstr ""
 
-#: includes/modules/TE_BrowserCache.php:323
+#: includes/modules/TE_BrowserCache.php:623
 msgid "Cache rules active in .htaccess. Varnish respects these TTLs from origin."
 msgstr ""
 
-#: includes/modules/TE_BrowserCache.php:324
+#: includes/modules/TE_BrowserCache.php:624
 msgid "Rules not in .htaccess. Save settings to write them, or check file permissions."
 msgstr ""
 
-#: includes/modules/TE_BrowserCache.php:327
-msgid "Nginx detected. Copy the config snippet below and include it in your server {} block."
+#: includes/modules/TE_BrowserCache.php:627
+msgid "Nginx: these TTLs are NOT applied automatically — nginx does not read .htaccess. Until the snippet below is installed in the server block (or the VCL snippet in Transparent Edge), browsers get no max-age from the origin."
 msgstr ""
 
-#: includes/modules/TE_BrowserCache.php:330
+#: includes/modules/TE_BrowserCache.php:630
 msgid "Server type not detected. Configure Cache-Control headers in your web server for static files."
 msgstr ""
 
-#: includes/modules/TE_Preload.php:75
+#: includes/modules/TE_Preload.php:87
 msgid "No URLs found to preload."
 msgstr ""
 
-#: includes/modules/TE_Preload.php:108
+#: includes/modules/TE_Preload.php:120
 #, php-format
 msgid "Preload queued: %d URLs. Warming in background..."
 msgstr ""
@@ -168,68 +165,70 @@ msgstr ""
 msgid "Transparent Edge Cache: the object cache drop-in (%s) is installed but its server is not answering — it is NOT caching persistently (every request recomputes against the database). Start the service or switch backend."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:189
-#: includes/modules/TE_ObjectCache.php:249
+#: includes/modules/TE_ObjectCache.php:217 includes/modules/TE_ObjectCache.php:277
 msgid "Redis server requires a password. Add to wp-config.php:"
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:193
-#: includes/modules/TE_ObjectCache.php:253
+#: includes/modules/TE_ObjectCache.php:221 includes/modules/TE_ObjectCache.php:281
 msgid "Redis AUTH failed. Check WP_REDIS_PASSWORD in wp-config.php."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:203
+#: includes/modules/TE_ObjectCache.php:231
 msgid "phpredis is installed but no Redis server answered here. Start Redis, or point WP_REDIS_HOST / WP_REDIS_PORT at a running one."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:242
+#: includes/modules/TE_ObjectCache.php:270
 msgid "Redis server running, but PHP extension (phpredis) is not installed. Install it with: sudo apt install php-redis && sudo systemctl restart php-fpm"
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:283
+#: includes/modules/TE_ObjectCache.php:311
 msgid "the Memcached PHP extension is installed but no server answered here. Start memcached, or point WP_MEMCACHED_HOST / WP_MEMCACHED_PORT at a running one."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:303
+#: includes/modules/TE_ObjectCache.php:331
 msgid "Memcached server running, but the PHP extension is not installed. Install it with: sudo apt install php-memcached && sudo systemctl restart php-fpm"
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:503
+#: includes/modules/TE_ObjectCache.php:531
 #, php-format
 msgid "Another object cache drop-in is already installed (%s). Remove it first, or replace it."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:520
+#: includes/modules/TE_ObjectCache.php:548
 #, php-format
 msgid "Object cache backend \"%s\" is not supported."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:527
+#: includes/modules/TE_ObjectCache.php:555
 msgid "Could not write object-cache.php. Check file permissions on wp-content/."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:535
+#: includes/modules/TE_ObjectCache.php:563
 #, php-format
 msgid "Object Cache enabled with %s backend."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:607
+#: includes/modules/TE_ObjectCache.php:643
 msgid "No drop-in to remove."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:613
+#: includes/modules/TE_ObjectCache.php:649
 msgid "The drop-in was not installed by this plugin."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:618
+#: includes/modules/TE_ObjectCache.php:654
 msgid "Object Cache disabled."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:621
+#: includes/modules/TE_ObjectCache.php:657
 msgid "Could not remove object-cache.php."
 msgstr ""
 
-#: includes/modules/TE_ObjectCache.php:650
+#: includes/modules/TE_ObjectCache.php:682
+msgid "Automatic installation has been turned off; re-enable it under Object Cache settings."
+msgstr ""
+
+#: includes/modules/TE_ObjectCache.php:692
 msgid "Object cache flushed."
 msgstr ""
 
@@ -237,8 +236,7 @@ msgstr ""
 msgid "TE Cache Network"
 msgstr ""
 
-#: includes/modules/TE_Multisite.php:54 includes/admin/TE_Admin.php:48
-#: includes/TE_Core.php:143
+#: includes/modules/TE_Multisite.php:54 includes/admin/TE_Admin.php:48 includes/TE_Core.php:143
 msgid "TE Cache"
 msgstr ""
 
@@ -258,18 +256,15 @@ msgstr ""
 msgid "These credentials are used as defaults for all sites. Each site can override them in their own TE Cache settings."
 msgstr ""
 
-#: includes/modules/TE_Multisite.php:85 includes/admin/views/main-page.php:83
-#: includes/admin/views/main-page.php:300
+#: includes/modules/TE_Multisite.php:85 includes/admin/views/main-page.php:83 includes/admin/views/main-page.php:300
 msgid "Company ID"
 msgstr ""
 
-#: includes/modules/TE_Multisite.php:89 includes/admin/views/main-page.php:87
-#: includes/admin/views/main-page.php:304
+#: includes/modules/TE_Multisite.php:89 includes/admin/views/main-page.php:87 includes/admin/views/main-page.php:304
 msgid "Client ID"
 msgstr ""
 
-#: includes/modules/TE_Multisite.php:93 includes/admin/views/main-page.php:91
-#: includes/admin/views/main-page.php:308
+#: includes/modules/TE_Multisite.php:93 includes/admin/views/main-page.php:91 includes/admin/views/main-page.php:308
 msgid "Client Secret"
 msgstr ""
 
@@ -403,7 +398,7 @@ msgstr ""
 msgid "Enter your credentials from the TE dashboard (Settings → API)."
 msgstr ""
 
-#: includes/admin/views/main-page.php:99
+#: includes/admin/views/main-page.php:99 includes/admin/TE_Admin.php:123
 msgid "Connect & Configure"
 msgstr ""
 
@@ -435,13 +430,11 @@ msgstr ""
 msgid "Optimization"
 msgstr ""
 
-#: includes/admin/views/main-page.php:117
-#: includes/admin/views/main-page.php:909
+#: includes/admin/views/main-page.php:117 includes/admin/views/main-page.php:973
 msgid "Speculation Rules"
 msgstr ""
 
-#: includes/admin/views/main-page.php:119
-#: includes/admin/views/tab-security.php:15
+#: includes/admin/views/main-page.php:119 includes/admin/views/tab-security.php:15
 msgid "Security"
 msgstr ""
 
@@ -473,8 +466,7 @@ msgstr ""
 msgid "Not persistent"
 msgstr ""
 
-#: includes/admin/views/main-page.php:159
-#: includes/admin/views/main-page.php:215
+#: includes/admin/views/main-page.php:159 includes/admin/views/main-page.php:215
 msgid "Disabled"
 msgstr ""
 
@@ -512,7 +504,7 @@ msgstr ""
 msgid "No backend detected"
 msgstr ""
 
-#: includes/admin/views/main-page.php:192
+#: includes/admin/views/main-page.php:192 includes/admin/TE_Admin.php:150
 msgid "Replace with ours"
 msgstr ""
 
@@ -521,13 +513,11 @@ msgstr ""
 msgid "Enable %s"
 msgstr ""
 
-#: includes/admin/views/main-page.php:198
-#: includes/admin/views/main-page.php:241
+#: includes/admin/views/main-page.php:198 includes/admin/views/main-page.php:241 includes/admin/TE_Admin.php:141
 msgid "Flush"
 msgstr ""
 
-#: includes/admin/views/main-page.php:199
-#: includes/admin/views/main-page.php:242
+#: includes/admin/views/main-page.php:199 includes/admin/views/main-page.php:242 includes/admin/TE_Admin.php:126
 msgid "Disable"
 msgstr ""
 
@@ -564,8 +554,7 @@ msgstr ""
 msgid "The selected backend is not available on this server."
 msgstr ""
 
-#: includes/admin/views/main-page.php:239
-#: includes/admin/views/main-page.php:1046
+#: includes/admin/views/main-page.php:239 includes/admin/views/main-page.php:1134 includes/admin/TE_Admin.php:131
 msgid "Enable"
 msgstr ""
 
@@ -577,7 +566,7 @@ msgstr ""
 msgid "files"
 msgstr ""
 
-#: includes/admin/views/main-page.php:254
+#: includes/admin/views/main-page.php:254 includes/admin/TE_Admin.php:119
 msgid "Clear Minify Cache"
 msgstr ""
 
@@ -589,8 +578,7 @@ msgstr ""
 msgid "optimizations active"
 msgstr ""
 
-#: includes/admin/views/main-page.php:268
-#: includes/admin/views/main-page.php:1079
+#: includes/admin/views/main-page.php:268 includes/admin/views/main-page.php:1167
 msgid "Invalidation History"
 msgstr ""
 
@@ -670,9 +658,7 @@ msgstr ""
 msgid "Pages, posts, archives, REST API — generated by PHP. These headers are sent by the plugin directly."
 msgstr ""
 
-#: includes/admin/views/main-page.php:357
-#: includes/admin/views/main-page.php:389
-#: includes/admin/views/main-page.php:498
+#: includes/admin/views/main-page.php:357 includes/admin/views/main-page.php:389 includes/admin/views/main-page.php:498
 msgid "CDN TTL (s-maxage)"
 msgstr ""
 
@@ -680,9 +666,7 @@ msgstr ""
 msgid "seconds. Default: 172800 (48h). How long Varnish keeps HTML pages."
 msgstr ""
 
-#: includes/admin/views/main-page.php:364
-#: includes/admin/views/main-page.php:396
-#: includes/admin/views/main-page.php:505
+#: includes/admin/views/main-page.php:364 includes/admin/views/main-page.php:396 includes/admin/views/main-page.php:505
 msgid "Browser TTL (max-age)"
 msgstr ""
 
@@ -738,10 +722,7 @@ msgstr ""
 msgid "The homepage profile sends stale-while-revalidate and stale-if-error, but Varnish only serves stale during revalidation when grace/keep match. This snippet derives them from the Cache-Control the plugin sends, so they stay in sync. The plugin never deploys VCL — copy it into Configuration → VCL."
 msgstr ""
 
-#: includes/admin/views/main-page.php:423
-#: includes/admin/views/main-page.php:954
-#: includes/admin/views/tab-security.php:130
-#: includes/admin/views/tab-speculation.php:133
+#: includes/admin/views/main-page.php:423 includes/admin/views/main-page.php:1018 includes/admin/views/tab-security.php:130 includes/admin/views/tab-speculation.php:133
 msgid "Copy VCL"
 msgstr ""
 
@@ -769,8 +750,7 @@ msgstr ""
 msgid "Redis"
 msgstr ""
 
-#: includes/admin/views/main-page.php:449
-#: includes/admin/views/main-page.php:455
+#: includes/admin/views/main-page.php:449 includes/admin/views/main-page.php:455
 msgid "Available"
 msgstr ""
 
@@ -847,7 +827,7 @@ msgid "Static Resources (CSS, JS, images, fonts, video)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:494
-msgid "Static files are served by the web server, not PHP. The plugin sets Cache-Control headers so Varnish respects these TTLs from the origin. When assets change (media uploads, theme/plugin updates), the plugin invalidates them automatically."
+msgid "Static files are served by the web server, not PHP. On Apache/LiteSpeed the plugin writes these TTLs into .htaccess; on nginx they only apply once the snippet below is installed by hand. The check below shows what browsers really receive. When assets change (media uploads, theme/plugin updates), the plugin invalidates them automatically."
 msgstr ""
 
 #: includes/admin/views/main-page.php:501
@@ -863,664 +843,814 @@ msgid "Server:"
 msgstr ""
 
 #: includes/admin/views/main-page.php:529
-msgid "Nginx config snippet (add to your server {} block)"
+msgid "What browsers receive:"
 msgstr ""
 
-#: includes/admin/views/main-page.php:534
-msgid "📋 Copy"
+#: includes/admin/views/main-page.php:531
+msgid "not checked yet."
 msgstr ""
 
-#: includes/admin/views/main-page.php:541
-msgid "Static asset invalidation is automatic: media uploads, theme and plugin updates trigger Varnish purge. WordPress version strings (?ver=X) on CSS/JS handle browser cache-busting."
+#: includes/admin/views/main-page.php:537
+#, php-format
+msgid "✓ max-age=%1$d (expected %2$d)."
 msgstr ""
 
-#: includes/admin/views/main-page.php:547
-msgid "Cache Variants"
+#: includes/admin/views/main-page.php:539
+#, php-format
+msgid "⚠ max-age=%1$d, lower than the %2$d expected — another layer is setting it."
 msgstr ""
 
-#: includes/admin/views/main-page.php:550
-msgid "Surrogate-Keys"
+#: includes/admin/views/main-page.php:540
+msgid "✗ no max-age: browsers do not cache static files. The rules are not being applied — install the snippet for your server or the VCL below."
+msgstr ""
+
+#: includes/admin/views/main-page.php:542
+#, php-format
+msgid "⚠ could not check (%s)."
+msgstr ""
+
+#: includes/admin/views/main-page.php:549
+msgid "Check now"
 msgstr ""
 
 #: includes/admin/views/main-page.php:551
-msgid "Tag every page with content identifiers for surgical cache invalidation"
+msgid "Checked by requesting one of the plugin's own files through the CDN, as a visitor would. Files the plugin generates (minified/combined CSS and JS) are named after their content, so they are served for a year as immutable, whatever the Browser TTL above."
 msgstr ""
 
-#: includes/admin/views/main-page.php:554
-msgid "Vary by Device"
+#: includes/admin/views/main-page.php:556
+msgid "Nginx config snippet (add to your server {} block)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:555
-msgid "Separate cache for mobile and desktop (uses X-Device header)"
+#: includes/admin/views/main-page.php:561 includes/admin/views/main-page.php:573
+msgid "📋 Copy"
 msgstr ""
 
-#: includes/admin/views/main-page.php:558
-msgid "Vary by Language"
-msgstr ""
-
-#: includes/admin/views/main-page.php:559
-msgid "Separate cache per language (enable if using WPML/Polylang)"
-msgstr ""
-
-#: includes/admin/views/main-page.php:566
-msgid "Cache Invalidation"
-msgstr ""
-
-#: includes/admin/views/main-page.php:567
-msgid "Configure when and how cached content is automatically purged from the CDN."
-msgstr ""
-
-#: includes/admin/views/main-page.php:571
-msgid "Auto-invalidation"
-msgstr ""
-
-#: includes/admin/views/main-page.php:572
-msgid "Automatically purge cache when content changes"
-msgstr ""
-
-#: includes/admin/views/main-page.php:575
-msgid "Invalidation Method"
-msgstr ""
-
-#: includes/admin/views/main-page.php:578
-msgid "Soft Purge (recommended — serves stale if origin fails)"
+#: includes/admin/views/main-page.php:568
+msgid "Transparent Edge VCL snippet (applies the TTLs at the edge when the origin sends none)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:579
-msgid "Hard Purge (immediately removes from cache)"
-msgstr ""
-
-#: includes/admin/views/main-page.php:584
-msgid "Refetch after purge"
+msgid "Static asset invalidation is automatic: media uploads, theme and plugin updates trigger Varnish purge. WordPress version strings (?ver=X) on CSS/JS handle browser cache-busting."
 msgstr ""
 
 #: includes/admin/views/main-page.php:585
-msgid "Warm up cache immediately after invalidation (no cold MISSes)"
+msgid "Cache Variants"
 msgstr ""
 
 #: includes/admin/views/main-page.php:588
-msgid "Warm method"
+msgid "Surrogate-Keys"
 msgstr ""
 
-#: includes/admin/views/main-page.php:591
-msgid "Platform refetch (recommended — warms every edge node, origin-safe)"
+#: includes/admin/views/main-page.php:589
+msgid "Tag every page with content identifiers for surgical cache invalidation"
 msgstr ""
 
 #: includes/admin/views/main-page.php:592
-msgid "Origin GET (fallback — only warms one node)"
+msgid "Vary by Device"
 msgstr ""
 
-#: includes/admin/views/main-page.php:594
-msgid "Refetch re-warms the changed URLs on the whole edge in one call; the platform refetchers aggregate the origin fetches, so your origin sees one or two requests instead of one per node. It needs no MidTier. The origin GET is used automatically as a fallback when the API is unavailable."
+#: includes/admin/views/main-page.php:593
+msgid "Separate cache for mobile and desktop (uses X-Device header)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:598
-msgid "Purge triggers"
+#: includes/admin/views/main-page.php:596
+msgid "Vary by Language"
 msgstr ""
 
-#: includes/admin/views/main-page.php:601
-msgid "Posts & Pages"
+#: includes/admin/views/main-page.php:597
+msgid "Separate cache per language (enable if using WPML/Polylang)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:602
-msgid "Purge when a post, page, or CPT is published, updated, or deleted"
+#: includes/admin/views/main-page.php:604
+msgid "Cache Invalidation"
 msgstr ""
 
 #: includes/admin/views/main-page.php:605
-msgid "Comments"
-msgstr ""
-
-#: includes/admin/views/main-page.php:606
-msgid "Purge when a new comment is approved or edited"
+msgid "Configure when and how cached content is automatically purged from the CDN."
 msgstr ""
 
 #: includes/admin/views/main-page.php:609
-msgid "Menus"
+msgid "Auto-invalidation"
 msgstr ""
 
 #: includes/admin/views/main-page.php:610
-msgid "Purge when a navigation menu is updated"
+msgid "Automatically purge cache when content changes"
 msgstr ""
 
 #: includes/admin/views/main-page.php:613
-msgid "Widgets"
+msgid "Invalidation Method"
 msgstr ""
 
-#: includes/admin/views/main-page.php:614
-msgid "Purge when sidebar widgets are updated"
+#: includes/admin/views/main-page.php:616
+msgid "Soft Purge (recommended — serves stale if origin fails)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:617
-msgid "Theme Switch"
-msgstr ""
-
-#: includes/admin/views/main-page.php:618
-msgid "Full purge when the active theme is changed"
-msgstr ""
-
-#: includes/admin/views/main-page.php:621
-msgid "Plugin Changes"
+msgid "Hard Purge (immediately removes from cache)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:622
-msgid "Full purge when any plugin is activated or deactivated"
+msgid "Refetch after purge"
 msgstr ""
 
-#: includes/admin/views/main-page.php:625
-msgid "Cache warming"
+#: includes/admin/views/main-page.php:623
+msgid "Warm up cache immediately after invalidation (no cold MISSes)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:628
-msgid "Preload via Sitemap"
+#: includes/admin/views/main-page.php:626
+msgid "Warm method"
+msgstr ""
+
+#: includes/admin/views/main-page.php:629
+msgid "Platform refetch (recommended — warms every edge node, origin-safe)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:630
-msgid "Crawl the sitemap after a full purge to warm the CDN cache (no cold MISSes)"
+msgid "Origin GET (fallback — only warms one node)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:631
-msgid "A bulk warm of the whole site. It is throttled and gated so it never overloads the origin — see the controls below."
+#: includes/admin/views/main-page.php:632
+msgid "Refetch re-warms the changed URLs on the whole edge in one call; the platform refetchers aggregate the origin fetches, so your origin sees one or two requests instead of one per node. It needs no MidTier. The origin GET is used automatically as a fallback when the API is unavailable."
 msgstr ""
 
-#: includes/admin/views/main-page.php:635
-msgid "Preload method"
-msgstr ""
-
-#: includes/admin/views/main-page.php:638
-msgid "Refetch (recommended — origin-aggregated, safe for weak origins)"
+#: includes/admin/views/main-page.php:636
+msgid "Purge triggers"
 msgstr ""
 
 #: includes/admin/views/main-page.php:639
-msgid "Prefetch (populates without evicting, but fans out ~1 fetch per node — strong origins only)"
+msgid "Posts & Pages"
+msgstr ""
+
+#: includes/admin/views/main-page.php:640
+msgid "Purge when a post, page, or CPT is published, updated, or deleted"
 msgstr ""
 
 #: includes/admin/views/main-page.php:641
-msgid "Refetch collapses the origin fetches through the refetcher nodes (origin sees one or two per URL). Prefetch warms every node directly, so each node fetches from the origin — only choose it if your origin can take one request per edge node per URL."
+msgid "Publishing refreshes the post itself and the pages that list it: home, its sections and tags, its author page and feeds. Other posts are not touched."
+msgstr ""
+
+#: includes/admin/views/main-page.php:644
+msgid "\"Latest\" blocks in posts"
 msgstr ""
 
 #: includes/admin/views/main-page.php:645
-msgid "Adaptive pacing"
+msgid "Also refresh every post of the same type when one is published"
 msgstr ""
 
-#: includes/admin/views/main-page.php:647
-msgid "Auto-tune the warm-up speed to what the origin can take"
+#: includes/admin/views/main-page.php:646
+msgid "Only if your theme shows a \"latest news\" or similar block inside each post and it must update right away. On a large site this revalidates every post on each publish, which adds origin load — leave it off unless you need it."
 msgstr ""
 
-#: includes/admin/views/main-page.php:648
-msgid "Ramps the batch size up while the origin keeps up (its latency stays near its own baseline) and the page-cache disk has headroom, and cuts it back when the origin starts to slow, the platform rate-limits, or the disk runs low. It tunes to the origin's real capacity whatever its speed. The guardrails (health gate, backoff, off-peak) are unchanged — this only moves within them. Ideal for sites with thousands of URLs."
+#: includes/admin/views/main-page.php:649
+msgid "Comments"
 msgstr ""
 
-#: includes/admin/views/main-page.php:652
-msgid "Origin health gate"
+#: includes/admin/views/main-page.php:650
+msgid "Purge when a new comment is approved or edited"
+msgstr ""
+
+#: includes/admin/views/main-page.php:653
+msgid "Menus"
 msgstr ""
 
 #: includes/admin/views/main-page.php:654
-msgid "Probe the origin before each batch and pause the preload if it is slow or erroring"
+msgid "Purge when a navigation menu is updated"
 msgstr ""
 
-#: includes/admin/views/main-page.php:655
-msgid "This toggle governs the manual preload. The automatic preload after a full purge is always gated, whatever this is set to, so a scheduled warm never overloads the origin unattended."
+#: includes/admin/views/main-page.php:657
+msgid "Widgets"
 msgstr ""
 
-#: includes/admin/views/main-page.php:659
-msgid "Off-peak only"
+#: includes/admin/views/main-page.php:658
+msgid "Purge when sidebar widgets are updated"
 msgstr ""
 
 #: includes/admin/views/main-page.php:661
-msgid "Run the bulk preload only during an off-peak window"
+msgid "Theme Switch"
 msgstr ""
 
-#: includes/admin/views/main-page.php:663
-msgid "Window (site time, 24h):"
+#: includes/admin/views/main-page.php:662
+msgid "Full purge when the active theme is changed"
 msgstr ""
 
-#: includes/admin/views/main-page.php:676
-msgid "Optimize images on-the-fly at the CDN edge. No processing on your server, zero latency."
+#: includes/admin/views/main-page.php:665
+msgid "Plugin Changes"
 msgstr ""
 
-#: includes/admin/views/main-page.php:680
-msgid "Enable i3"
+#: includes/admin/views/main-page.php:666
+msgid "Full purge when any plugin is activated or deactivated"
 msgstr ""
 
-#: includes/admin/views/main-page.php:681
-msgid "Activate on-the-fly image optimization"
+#: includes/admin/views/main-page.php:669
+msgid "Cache warming"
 msgstr ""
 
-#: includes/admin/views/main-page.php:684
-msgid "Auto WebP"
+#: includes/admin/views/main-page.php:672
+msgid "Preload via Sitemap"
+msgstr ""
+
+#: includes/admin/views/main-page.php:674
+msgid "Crawl the sitemap after a full purge to warm the CDN cache (no cold MISSes)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:675
+msgid "A bulk warm of the whole site. It is throttled and gated so it never overloads the origin — see the controls below."
+msgstr ""
+
+#: includes/admin/views/main-page.php:679
+msgid "Preload method"
+msgstr ""
+
+#: includes/admin/views/main-page.php:682
+msgid "Refetch (recommended — origin-aggregated, safe for weak origins)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:683
+msgid "Prefetch (populates without evicting, but fans out ~1 fetch per node — strong origins only)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:685
-msgid "Automatically convert images to WebP for supported browsers"
+msgid "Refetch collapses the origin fetches through the refetcher nodes (origin sees one or two per URL). Prefetch warms every node directly, so each node fetches from the origin — only choose it if your origin can take one request per edge node per URL."
 msgstr ""
 
-#: includes/admin/views/main-page.php:688
-msgid "JPEG Quality"
+#: includes/admin/views/main-page.php:689
+msgid "Adaptive pacing"
 msgstr ""
 
-#: includes/admin/views/main-page.php:695
-msgid "WebP Quality"
+#: includes/admin/views/main-page.php:691
+msgid "Auto-tune the warm-up speed to what the origin can take"
 msgstr ""
 
-#: includes/admin/views/main-page.php:702
-msgid "Max image size"
+#: includes/admin/views/main-page.php:692
+msgid "Ramps the batch size up while the origin keeps up (its latency stays near its own baseline) and the page-cache disk has headroom, and cuts it back when the origin starts to slow, the platform rate-limits, or the disk runs low. It tunes to the origin's real capacity whatever its speed. The guardrails (health gate, backoff, off-peak) are unchanged — this only moves within them. Ideal for sites with thousands of URLs."
+msgstr ""
+
+#: includes/admin/views/main-page.php:696
+msgid "Origin health gate"
+msgstr ""
+
+#: includes/admin/views/main-page.php:698
+msgid "Probe the origin before each batch and pause the preload if it is slow or erroring"
+msgstr ""
+
+#: includes/admin/views/main-page.php:699
+msgid "This toggle governs the manual preload. The automatic preload after a full purge is always gated, whatever this is set to, so a scheduled warm never overloads the origin unattended."
+msgstr ""
+
+#: includes/admin/views/main-page.php:703
+msgid "Off-peak only"
 msgstr ""
 
 #: includes/admin/views/main-page.php:705
+msgid "Run the bulk preload only during an off-peak window"
+msgstr ""
+
+#: includes/admin/views/main-page.php:707
+msgid "Window (site time, 24h):"
+msgstr ""
+
+#: includes/admin/views/main-page.php:720
+msgid "Optimize images on-the-fly at the CDN edge. No processing on your server, zero latency."
+msgstr ""
+
+#: includes/admin/views/main-page.php:724
+msgid "Enable i3"
+msgstr ""
+
+#: includes/admin/views/main-page.php:725
+msgid "Activate on-the-fly image optimization"
+msgstr ""
+
+#: includes/admin/views/main-page.php:728
+msgid "Auto WebP"
+msgstr ""
+
+#: includes/admin/views/main-page.php:729
+msgid "Automatically convert images to WebP for supported browsers"
+msgstr ""
+
+#: includes/admin/views/main-page.php:732
+msgid "JPEG Quality"
+msgstr ""
+
+#: includes/admin/views/main-page.php:739
+msgid "WebP Quality"
+msgstr ""
+
+#: includes/admin/views/main-page.php:746
+msgid "Max image size"
+msgstr ""
+
+#: includes/admin/views/main-page.php:749
 msgid "e.g., 500k, 1m. Progressive quality reduction to stay under limit."
 msgstr ""
 
-#: includes/admin/views/main-page.php:712
+#: includes/admin/views/main-page.php:756
 msgid "VCL Snippet — Deploy in Transparent Edge Dashboard"
 msgstr ""
 
-#: includes/admin/views/main-page.php:714
+#: includes/admin/views/main-page.php:758
 msgid "Copy this VCL snippet and deploy it from your Transparent Edge dashboard (Configuration → VCL). Save your i3 settings above first, then copy the generated snippet."
 msgstr ""
 
-#: includes/admin/views/main-page.php:719
-#: includes/admin/views/main-page.php:973
+#: includes/admin/views/main-page.php:763 includes/admin/views/main-page.php:1037
 msgid "📋 Copy VCL"
 msgstr ""
 
-#: includes/admin/views/main-page.php:723
+#: includes/admin/views/main-page.php:767
 msgid "Steps:"
 msgstr ""
 
-#: includes/admin/views/main-page.php:727
+#: includes/admin/views/main-page.php:771
 #, php-format
 msgid "1. Copy the snippet above. 2. Go to %s. 3. Add the snippet to your VCL configuration. 4. Deploy."
 msgstr ""
 
-#: includes/admin/views/main-page.php:738
+#: includes/admin/views/main-page.php:782
 msgid "Frontend Optimization"
 msgstr ""
 
-#: includes/admin/views/main-page.php:739
+#: includes/admin/views/main-page.php:783
 msgid "Optimize Core Web Vitals (LCP, INP, CLS) by controlling how assets are loaded, minified, and served."
 msgstr ""
 
-#: includes/admin/views/main-page.php:743
+#: includes/admin/views/main-page.php:787
 msgid "CSS"
 msgstr ""
 
-#: includes/admin/views/main-page.php:746
+#: includes/admin/views/main-page.php:790
 msgid "Minify CSS"
 msgstr ""
 
-#: includes/admin/views/main-page.php:749
+#: includes/admin/views/main-page.php:793
 msgid "Minify CSS files (removes comments, whitespace). Cached to disk."
 msgstr ""
 
-#: includes/admin/views/main-page.php:750
+#: includes/admin/views/main-page.php:794
 msgid "Already-minified files (.min.css) and external CSS are skipped."
 msgstr ""
 
-#: includes/admin/views/main-page.php:754
+#: includes/admin/views/main-page.php:798
 msgid "Combine CSS"
 msgstr ""
 
-#: includes/admin/views/main-page.php:757
+#: includes/admin/views/main-page.php:801
 msgid "Combine local CSS files into a single file (reduces HTTP requests)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:758
+#: includes/admin/views/main-page.php:802
 msgid "Concatenates all local stylesheets into one file. External and conditional CSS are preserved. Includes minification automatically."
 msgstr ""
 
-#: includes/admin/views/main-page.php:762
+#: includes/admin/views/main-page.php:806
 msgid "Remove Unused CSS"
 msgstr ""
 
-#: includes/admin/views/main-page.php:765
+#: includes/admin/views/main-page.php:809
 msgid "Serve only the CSS each page actually uses (major LCP improvement)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:766
+#: includes/admin/views/main-page.php:810
 msgid "Used CSS is generated in the background per template and served inline; the rest is deferred. Generation never blocks visitors, and if it fails the original CSS is served unchanged."
 msgstr ""
 
-#: includes/admin/views/main-page.php:768
+#: includes/admin/views/main-page.php:812
 msgid "Exclusions (one handle or URL fragment per line):"
 msgstr ""
 
-#: includes/admin/views/main-page.php:775
+#: includes/admin/views/main-page.php:819
 msgid "JavaScript"
 msgstr ""
 
-#: includes/admin/views/main-page.php:778
+#: includes/admin/views/main-page.php:822
 msgid "Minify JS"
 msgstr ""
 
-#: includes/admin/views/main-page.php:781
+#: includes/admin/views/main-page.php:825
 msgid "Minify JS files (removes comments, extra whitespace). Cached to disk."
 msgstr ""
 
-#: includes/admin/views/main-page.php:782
+#: includes/admin/views/main-page.php:826
 msgid "Already-minified files (.min.js), jQuery, and external scripts are skipped. Conservative approach to avoid breaking JS."
 msgstr ""
 
-#: includes/admin/views/main-page.php:786
+#: includes/admin/views/main-page.php:830
 msgid "Combine JS"
 msgstr ""
 
-#: includes/admin/views/main-page.php:789
+#: includes/admin/views/main-page.php:833
 msgid "Combine local JS files into a single file (reduces HTTP requests)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:790
+#: includes/admin/views/main-page.php:834
 msgid "Only footer scripts are combined. jQuery, WP core, and external scripts stay separate. Includes minification automatically."
 msgstr ""
 
-#: includes/admin/views/main-page.php:794
+#: includes/admin/views/main-page.php:838
 msgid "Combine JS Exclusions"
 msgstr ""
 
-#: includes/admin/views/main-page.php:797
+#: includes/admin/views/main-page.php:841
 msgid "One handle or pattern per line. Scripts matching these will NOT be combined."
 msgstr ""
 
-#: includes/admin/views/main-page.php:804
+#: includes/admin/views/main-page.php:848
 msgid "Add defer attribute to JS files (load without blocking HTML parsing)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:805
+#: includes/admin/views/main-page.php:849
 msgid "Improves LCP. jQuery and core WP scripts are excluded automatically."
 msgstr ""
 
-#: includes/admin/views/main-page.php:809
+#: includes/admin/views/main-page.php:853
 msgid "Defer JS Exclusions"
 msgstr ""
 
-#: includes/admin/views/main-page.php:812
+#: includes/admin/views/main-page.php:856
 msgid "One handle or pattern per line. Scripts matching these will NOT get defer."
 msgstr ""
 
-#: includes/admin/views/main-page.php:816
+#: includes/admin/views/main-page.php:860
 msgid "Delay JS Execution"
 msgstr ""
 
-#: includes/admin/views/main-page.php:819
+#: includes/admin/views/main-page.php:863
 msgid "Delay non-critical JavaScript until user interaction (mouse, scroll, touch)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:820
+#: includes/admin/views/main-page.php:864
 msgid "More aggressive than defer — scripts don't load at all until user interacts. Best for INP."
 msgstr ""
 
-#: includes/admin/views/main-page.php:824
+#: includes/admin/views/main-page.php:868
 msgid "Delay JS Exclusions"
 msgstr ""
 
-#: includes/admin/views/main-page.php:827
-msgid "One pattern per line. jQuery is always excluded."
-msgstr ""
-
-#: includes/admin/views/main-page.php:832
-msgid "Images & Media"
-msgstr ""
-
-#: includes/admin/views/main-page.php:838
-msgid "Add loading=\"lazy\" to below-the-fold images"
-msgstr ""
-
-#: includes/admin/views/main-page.php:845
-msgid "Add loading=\"lazy\" to iframes (YouTube, Google Maps, etc.)"
-msgstr ""
-
-#: includes/admin/views/main-page.php:849
-msgid "Lazy Load Background Images"
-msgstr ""
-
-#: includes/admin/views/main-page.php:852
-msgid "Defer CSS background images (inline style) until they approach the viewport"
-msgstr ""
-
-#: includes/admin/views/main-page.php:853
-msgid "The first two background images are kept eager to protect LCP. Add data-no-lazy to opt an element out."
-msgstr ""
-
-#: includes/admin/views/main-page.php:857
-msgid "Preload LCP Image"
-msgstr ""
-
-#: includes/admin/views/main-page.php:860
-msgid "Detect the first image and add a preload hint in <head> for faster LCP"
-msgstr ""
-
-#: includes/admin/views/main-page.php:865
-msgid "HTML"
-msgstr ""
-
-#: includes/admin/views/main-page.php:868
-msgid "Minify HTML"
-msgstr ""
-
 #: includes/admin/views/main-page.php:871
-msgid "Remove comments, extra whitespace, and blank lines from HTML"
+msgid "One pattern per line. jQuery is always excluded. A pattern matches anywhere in the whole <script> tag — its attributes (src, id) and, for inline scripts, its code — not only the src. A script injected at runtime by another script (e.g. gtm.js loaded by the GTM snippet) never appears in the HTML: write a pattern that matches the snippet that loads it. Excluded scripts are also kept out of the combined JS bundle."
 msgstr ""
 
-#: includes/admin/views/main-page.php:876
-msgid "Fonts & Network"
+#: includes/admin/views/main-page.php:875
+msgid "Always Delay"
 msgstr ""
 
-#: includes/admin/views/main-page.php:882
-msgid "Download Google Fonts and serve them locally (better TTFB + GDPR)"
+#: includes/admin/views/main-page.php:878
+msgid "One pattern per line, matched the same way as the exclusions. Small inline scripts (under 500 bytes) are not delayed by default; list here the loader snippets you want delayed anyway — Google Tag Manager, Microsoft Clarity, Hotjar, Meta Pixel… Exclusions take precedence."
 msgstr ""
 
 #: includes/admin/views/main-page.php:883
-msgid "Eliminates DNS lookup to fonts.googleapis.com and fonts.gstatic.com. Fonts are cached in wp-content/cache/."
+msgid "Images & Media"
 msgstr ""
 
-#: includes/admin/views/main-page.php:887
-msgid "Additional DNS Prefetch"
-msgstr ""
-
-#: includes/admin/views/main-page.php:894
-msgid "Auto-detected:"
+#: includes/admin/views/main-page.php:889
+msgid "Add loading=\"lazy\" to below-the-fold images"
 msgstr ""
 
 #: includes/admin/views/main-page.php:896
-msgid "These domains are prefetched automatically based on your active plugins. No action needed."
+msgid "Add loading=\"lazy\" to iframes (YouTube, Google Maps, etc.)"
 msgstr ""
 
 #: includes/admin/views/main-page.php:900
-msgid "Add any third-party origins not detected above (one per line). DNS is resolved and connections are opened before the browser needs them."
+msgid "Lazy Load Background Images"
+msgstr ""
+
+#: includes/admin/views/main-page.php:903
+msgid "Defer CSS background images (inline style) until they approach the viewport"
+msgstr ""
+
+#: includes/admin/views/main-page.php:904
+msgid "The first two background images are kept eager to protect LCP. Add data-no-lazy to opt an element out."
+msgstr ""
+
+#: includes/admin/views/main-page.php:908
+msgid "Preload LCP Image"
 msgstr ""
 
 #: includes/admin/views/main-page.php:911
-msgid "Accelerate page-to-page navigation by telling the browser to prefetch or prerender links before the user clicks."
+msgid "Detect the first image and add a preload hint in <head> for faster LCP"
 msgstr ""
 
-#: includes/admin/views/main-page.php:924
-msgid "Advanced Settings"
+#: includes/admin/views/main-page.php:916
+msgid "HTML"
 msgstr ""
 
-#: includes/admin/views/main-page.php:928
-msgid "Excluded URLs"
+#: includes/admin/views/main-page.php:919
+msgid "Minify HTML"
 msgstr ""
 
-#: includes/admin/views/main-page.php:931
-msgid "One pattern per line. Regex supported. These URLs will never be cached."
+#: includes/admin/views/main-page.php:922
+msgid "Remove comments, extra whitespace, and blank lines from HTML"
 msgstr ""
 
-#: includes/admin/views/main-page.php:935
-msgid "Excluded Cookies"
+#: includes/admin/views/main-page.php:927
+msgid "Fonts & Network"
+msgstr ""
+
+#: includes/admin/views/main-page.php:933
+msgid "Download Google Fonts and serve them locally (better TTFB + GDPR)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:934
+msgid "Eliminates DNS lookup to fonts.googleapis.com and fonts.gstatic.com. Fonts are cached in wp-content/cache/."
 msgstr ""
 
 #: includes/admin/views/main-page.php:938
-msgid "One pattern per line. If a visitor has any of these cookies, the page won't be cached."
-msgstr ""
-
-#: includes/admin/views/main-page.php:942
-msgid "Cookie normalisation"
-msgstr ""
-
-#: includes/admin/views/main-page.php:944
-msgid "A stray analytics or consent cookie can push the edge to pass every anonymous request to the origin. These tools keep that from happening."
+msgid "Additional DNS Prefetch"
 msgstr ""
 
 #: includes/admin/views/main-page.php:946
-msgid "Check cookies now"
+msgid "Auto-detected:"
 msgstr ""
 
-#: includes/admin/views/main-page.php:951
-msgid "Cookie-strip VCL snippet (propose-only — review before deploying)"
+#: includes/admin/views/main-page.php:950
+msgid "excluded"
 msgstr ""
 
-#: includes/admin/views/main-page.php:952
-msgid "Keeps only the Excluded Cookies above and strips the rest before the cache lookup, so a stray cookie no longer causes a miss. The plugin never deploys VCL — copy it into Configuration → VCL on the Transparent Edge dashboard."
+#: includes/admin/views/main-page.php:953
+msgid "These domains are prefetched automatically based on your active plugins. No action needed."
 msgstr ""
 
-#: includes/admin/views/main-page.php:960
-msgid "Ignored Query Strings"
+#: includes/admin/views/main-page.php:957
+msgid "Add any third-party origins not detected above (one per line). DNS is resolved and connections are opened before the browser needs them."
 msgstr ""
 
-#: includes/admin/views/main-page.php:963
-msgid "One per line. These query parameters (UTM, fbclid, etc.) are stripped from the cache key."
+#: includes/admin/views/main-page.php:961
+msgid "Exclude Auto-detected"
 msgstr ""
 
-#: includes/admin/views/main-page.php:968
-msgid "VCL Snippet for Query String Stripping (deploy in TE dashboard)"
+#: includes/admin/views/main-page.php:964
+msgid "Auto-detected hosts that should get no dns-prefetch/preconnect hint (one per line) — for example a service your theme loads only after interaction."
 msgstr ""
 
-#: includes/admin/views/main-page.php:984
-msgid "WooCommerce"
+#: includes/admin/views/main-page.php:975
+msgid "Accelerate page-to-page navigation by telling the browser to prefetch or prerender links before the user clicks."
 msgstr ""
 
-#: includes/admin/views/main-page.php:987
-msgid "Exclude from cache"
+#: includes/admin/views/main-page.php:988
+msgid "Advanced Settings"
 msgstr ""
 
-#: includes/admin/views/main-page.php:989
-msgid "Cart page"
-msgstr ""
-
-#: includes/admin/views/main-page.php:990
-msgid "Checkout page"
-msgstr ""
-
-#: includes/admin/views/main-page.php:991
-msgid "My Account page"
+#: includes/admin/views/main-page.php:992
+msgid "Excluded URLs"
 msgstr ""
 
 #: includes/admin/views/main-page.php:995
-msgid "Stock changes"
+msgid "One pattern per line. Regex supported. These URLs will never be cached."
 msgstr ""
 
-#: includes/admin/views/main-page.php:996
-msgid "Purge product page when stock changes"
+#: includes/admin/views/main-page.php:999
+msgid "Excluded Cookies"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1001
-msgid "Heartbeat Control"
+#: includes/admin/views/main-page.php:1002
+msgid "One pattern per line. If a visitor has any of these cookies, the page won't be cached."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1004
-msgid "Heartbeat Behavior"
-msgstr ""
-
-#: includes/admin/views/main-page.php:1007
-msgid "Default (WordPress controls it)"
+#: includes/admin/views/main-page.php:1006
+msgid "Cookie normalisation"
 msgstr ""
 
 #: includes/admin/views/main-page.php:1008
-msgid "Reduce frequency (recommended)"
+msgid "A stray analytics or consent cookie can push the edge to pass every anonymous request to the origin. These tools keep that from happening."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1009
-msgid "Disable everywhere (saves max resources)"
-msgstr ""
-
-#: includes/admin/views/main-page.php:1011
-msgid "The Heartbeat API sends AJAX requests every 15-60s for autosave, post locking, etc. Reducing it saves server resources."
+#: includes/admin/views/main-page.php:1010 includes/admin/TE_Admin.php:117
+msgid "Check cookies now"
 msgstr ""
 
 #: includes/admin/views/main-page.php:1015
-msgid "Heartbeat Interval"
+msgid "Cookie-strip VCL snippet (propose-only — review before deploying)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1018
-msgid "seconds (15-120). Default WP: 15-60. Recommended: 60 or 120."
+#: includes/admin/views/main-page.php:1016
+msgid "Keeps only the Excluded Cookies above and strips the rest before the cache lookup, so a stray cookie no longer causes a miss. The plugin never deploys VCL — copy it into Configuration → VCL on the Transparent Edge dashboard."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1022
-msgid "Disable in Admin"
+#: includes/admin/views/main-page.php:1024
+msgid "Ignored Query Strings"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1025
-msgid "Disable Heartbeat in the admin dashboard (except post editor)"
-msgstr ""
-
-#: includes/admin/views/main-page.php:1029
-msgid "Disable in Post Editor"
+#: includes/admin/views/main-page.php:1027
+msgid "One per line. These query parameters (UTM, fbclid, etc.) are stripped from the cache key."
 msgstr ""
 
 #: includes/admin/views/main-page.php:1032
-msgid "Disable Heartbeat in the post editor (warning: disables autosave)"
+msgid "VCL Snippet for Query String Stripping (deploy in TE dashboard)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1033
-msgid "Use with caution. Without autosave, unsaved work is lost if the browser crashes."
-msgstr ""
-
-#: includes/admin/views/main-page.php:1038
-msgid "Editorial write load (revisions &amp; autosave)"
-msgstr ""
-
-#: includes/admin/views/main-page.php:1042
-msgid "Every autosave tick and every stored revision is a database write on the logged-in path, which no cache can absorb. On an editor-heavy site this adds up. These controls are optional and change nothing until enabled."
+#: includes/admin/views/main-page.php:1047
+msgid "Normalize Query Strings"
 msgstr ""
 
 #: includes/admin/views/main-page.php:1049
-msgid "Apply the revision and autosave limits below"
+msgid "Serve cached pages for unknown query strings (keep only the allowlisted parameters in the cache key)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1053
-msgid "Revisions to keep"
+#: includes/admin/views/main-page.php:1050
+msgid "OFF by default. When on, a URL with an unrecognised parameter (e.g. ?ref=x, ?zz=1) is served from cache instead of forcing a full page render — this closes a cache-busting load vector. Only enable it where every parameter that changes the page is in the allowlist below; NOT safe on sites with WooCommerce filters, faceted search or custom query-based content."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1056
-msgid "-1 = leave WordPress alone (default). 0 = disable revisions. A positive number keeps that many per post."
+#: includes/admin/views/main-page.php:1054
+msgid "Content Query Strings (allowlist)"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1060
-msgid "Autosave interval"
+#: includes/admin/views/main-page.php:1057
+msgid "One per line. Only used when “Normalize Query Strings” is on. WordPress core content parameters (p, page_id, paged, cat, tag, author…) are already included — add here any extra parameter that genuinely changes the page and must keep its own cache entry. Search (?s=) is not cached: it bypasses automatically so it never collapses onto the clean URL."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1063
-msgid "seconds. 0 = leave WordPress default (60s). Otherwise clamped to 60-600. Ignored if AUTOSAVE_INTERVAL is set in wp-config.php."
+#: includes/admin/views/main-page.php:1062
+msgid "Content-negotiation Variant Header"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1068
-msgid "Debug"
+#: includes/admin/views/main-page.php:1065
+msgid "Optional. Name of an edge-set request header (value \"1\") that selects an alternate cached representation of the SAME URL - e.g. a Markdown version for AI agents. Leave empty to disable. The stored page is kept under its own key, so it never collides with the HTML one."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1071
-msgid "Debug Mode"
+#: includes/admin/views/main-page.php:1066
+msgid "Requirement:"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1066
+msgid "the edge MUST unset this header on the incoming request and set it itself from its own content negotiation; otherwise a client could choose its own variant."
 msgstr ""
 
 #: includes/admin/views/main-page.php:1072
-msgid "Add debug headers (X-Flavor-Edge-Keys, X-Flavor-Edge-TTL) to responses"
+msgid "WooCommerce"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1080
-msgid "All invalidation events are registered in the Transparent Edge dashboard via the API. No local log needed."
+#: includes/admin/views/main-page.php:1075
+msgid "Exclude from cache"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1085
-msgid "Purge events, timestamps, and results are available in your Transparent Edge dashboard:"
+#: includes/admin/views/main-page.php:1077
+msgid "Cart page"
 msgstr ""
 
-#: includes/admin/views/main-page.php:1088
-msgid "View Invalidation History →"
+#: includes/admin/views/main-page.php:1078
+msgid "Checkout page"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1079
+msgid "My Account page"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1083
+msgid "Stock changes"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1084
+msgid "Purge product page when stock changes"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1089
+msgid "Heartbeat Control"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1092
+msgid "Heartbeat Behavior"
 msgstr ""
 
 #: includes/admin/views/main-page.php:1095
+msgid "Default (WordPress controls it)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1096
+msgid "Reduce frequency (recommended)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1097
+msgid "Disable everywhere (saves max resources)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1099
+msgid "The Heartbeat API sends AJAX requests every 15-60s for autosave, post locking, etc. Reducing it saves server resources."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1103
+msgid "Heartbeat Interval"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1106
+msgid "seconds (15-120). Default WP: 15-60. Recommended: 60 or 120."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1110
+msgid "Disable in Admin"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1113
+msgid "Disable Heartbeat in the admin dashboard (except post editor)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1117
+msgid "Disable in Post Editor"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1120
+msgid "Disable Heartbeat in the post editor (warning: disables autosave)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1121
+msgid "Use with caution. Without autosave, unsaved work is lost if the browser crashes."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1126
+msgid "Editorial write load (revisions &amp; autosave)"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1130
+msgid "Every autosave tick and every stored revision is a database write on the logged-in path, which no cache can absorb. On an editor-heavy site this adds up. These controls are optional and change nothing until enabled."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1137
+msgid "Apply the revision and autosave limits below"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1141
+msgid "Revisions to keep"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1144
+msgid "-1 = leave WordPress alone (default). 0 = disable revisions. A positive number keeps that many per post."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1148
+msgid "Autosave interval"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1151
+msgid "seconds. 0 = leave WordPress default (60s). Otherwise clamped to 60-600. Ignored if AUTOSAVE_INTERVAL is set in wp-config.php."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1156
+msgid "Debug"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1159
+msgid "Debug Mode"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1160
+msgid "Add debug headers (X-Flavor-Edge-Keys, X-Flavor-Edge-TTL) to responses"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1168
+msgid "The latest purges this site sent to Transparent Edge: what triggered each one, what was purged and the result. Bulk preload batches are listed only when they fail."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1174
+msgid "No purges recorded yet."
+msgstr ""
+
+#: includes/admin/views/main-page.php:1179
+msgid "Date"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1180
+msgid "Triggered by"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1181
+msgid "Type"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1182
+msgid "Purged"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1183
+msgid "Result"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1184
+msgid "User"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1206
+msgid "tags"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1207
+msgid "URLs"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1208
+msgid "ban"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1231
+msgid "Purge events, timestamps, and results are available in your Transparent Edge dashboard:"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1234
+msgid "View Invalidation History →"
+msgstr ""
+
+#: includes/admin/views/main-page.php:1241
 msgid "Connect to the API first to access your invalidation history."
 msgstr ""
 
-#: includes/admin/views/main-page.php:1102
+#: includes/admin/views/main-page.php:1248
 msgid "Save Settings"
 msgstr ""
 
@@ -1759,7 +1889,7 @@ msgstr ""
 msgid "Saving..."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:96 includes/admin/TE_Admin.php:461
+#: includes/admin/TE_Admin.php:96 includes/admin/TE_Admin.php:521
 msgid "Settings saved!"
 msgstr ""
 
@@ -1779,62 +1909,214 @@ msgstr ""
 msgid "Are you sure you want to purge all cached content?"
 msgstr ""
 
+#: includes/admin/TE_Admin.php:115
+#, php-format
+msgid "%s errors"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:116
+msgid "AJAX Error: "
+msgstr ""
+
+#: includes/admin/TE_Admin.php:118
+msgid "Checking..."
+msgstr ""
+
 #: includes/admin/TE_Admin.php:120
-msgid "Transparent Edge Cache: View file not found. Please reinstall the plugin."
+#, php-format
+msgid "Cleared %s files"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:121
+msgid "Clearing..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:122
+#, php-format
+msgid "Completed: %s URLs warmed"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:124
+msgid "Connecting..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:125
+msgid "Copied!"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:127
+msgid "Disable Object Cache? This will remove wp-content/object-cache.php."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:128
+msgid "Disable the origin page cache? This removes advanced-cache.php and unsets our WP_CACHE define."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:129
+msgid "Disabling..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:130
+msgid "Done!"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:132
+msgid "Enable "
+msgstr ""
+
+#: includes/admin/TE_Admin.php:133
+#, php-format
+msgid "Enable %s Object Cache? This will create wp-content/object-cache.php."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:134
+msgid "Enable the origin page cache? This writes wp-content/advanced-cache.php and sets WP_CACHE in wp-config.php."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:135
+msgid "Enabling..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:136
+msgid "Error"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:137
+msgid "Error enabling Object Cache"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:138
+msgid "Error enabling page cache"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:139
+msgid "Error replacing Object Cache"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:140
+msgid "Error: "
+msgstr ""
+
+#: includes/admin/TE_Admin.php:142
+msgid "Flushed"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:143
+msgid "Flushing..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:144
+msgid "Please fill in all credentials."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:145
+#, php-format
+msgid "Preload %s"
 msgstr ""
 
 #: includes/admin/TE_Admin.php:146
-msgid "⚠ Transparent Edge API no disponible."
+msgid "Preload Cache via Sitemap"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:147 includes/admin/TE_Admin.php:642
+msgid "Preload stopped."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:148
+msgid "Queuing URLs..."
 msgstr ""
 
 #: includes/admin/TE_Admin.php:149
 #, php-format
+msgid "Replace the existing object-cache.php from another plugin with Transparent Edge (%s)? The current drop-in will be backed up to wp-content/cache/flavor-edge/ first."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:151
+msgid "Replacing..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:152
+msgid "Request failed"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:153
+msgid "Stop Preload"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:154
+msgid "Stopping..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:155
+msgid "Warming cache..."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:156
+#, php-format
+msgid "Warming: %1$s/%2$s (%3$s%)"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:157
+msgid "check browser console"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:158
+#, php-format
+msgid "in %ss"
+msgstr ""
+
+#: includes/admin/TE_Admin.php:178
+msgid "Transparent Edge Cache: View file not found. Please reinstall the plugin."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:204
+msgid "⚠ Transparent Edge API no disponible."
+msgstr ""
+
+#: includes/admin/TE_Admin.php:207
+#, php-format
 msgid "Las funciones de invalidación CDN están suspendidas temporalmente (reintento automático en %d seg). Las optimizaciones locales (minify, lazy load, etc.) siguen activas."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:153 includes/admin/TE_Admin.php:186
+#: includes/admin/TE_Admin.php:211 includes/admin/TE_Admin.php:244
 msgid "Reintentar ahora"
 msgstr ""
 
-#: includes/admin/TE_Admin.php:160
+#: includes/admin/TE_Admin.php:218
 #, php-format
 msgid "Transparent Edge API: %d fallo(s) recientes de conexión. El plugin sigue funcionando, pero revisa la configuración si el problema persiste."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:183
+#: includes/admin/TE_Admin.php:241
 msgid "⚠ Transparent Edge API desconectada."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:184
+#: includes/admin/TE_Admin.php:242
 msgid "La API ha sido inalcanzable durante múltiples verificaciones. Las optimizaciones locales siguen activas. La conexión se restaurará automáticamente cuando la API vuelva a estar disponible."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:188
+#: includes/admin/TE_Admin.php:246
 msgid "Ver configuración"
 msgstr ""
 
-#: includes/admin/TE_Admin.php:194
+#: includes/admin/TE_Admin.php:252
 msgid "Transparent Edge Cache needs to be configured."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:196
+#: includes/admin/TE_Admin.php:254
 msgid "Set it up now →"
 msgstr ""
 
-#: includes/admin/TE_Admin.php:211 includes/TE_Core.php:184
+#: includes/admin/TE_Admin.php:269 includes/TE_Core.php:184
 msgid "Settings"
 msgstr ""
 
-#: includes/admin/TE_Admin.php:273
+#: includes/admin/TE_Admin.php:331
 msgid "No settings submitted."
 msgstr ""
 
-#: includes/admin/TE_Admin.php:553
+#: includes/admin/TE_Admin.php:614
 msgid "Configuration applied! Your site is now optimized."
-msgstr ""
-
-#: includes/admin/TE_Admin.php:581
-msgid "Preload stopped."
 msgstr ""
 
 #: includes/TE_Core.php:141
@@ -1853,24 +2135,24 @@ msgstr ""
 msgid "Please wait a few seconds between purge actions."
 msgstr ""
 
-#: includes/TE_Core.php:227
+#: includes/TE_Core.php:228
 msgid "All cache purged successfully."
 msgstr ""
 
-#: includes/TE_Core.php:228 includes/TE_Core.php:243
+#: includes/TE_Core.php:229 includes/TE_Core.php:251
 msgid "Purge failed: "
 msgstr ""
 
-#: includes/TE_Core.php:240
+#: includes/TE_Core.php:248
 #, php-format
 msgid "Cache purged for post #%d."
 msgstr ""
 
-#: includes/TE_Core.php:252
+#: includes/TE_Core.php:260
 msgid "API connection restored successfully."
 msgstr ""
 
-#: includes/TE_Core.php:253
+#: includes/TE_Core.php:261
 msgid "API connection still failing. Check your credentials and network."
 msgstr ""
 
@@ -1883,51 +2165,251 @@ msgstr ""
 msgid "Connection successful! Your credentials are valid."
 msgstr ""
 
+#: includes/TE_Api.php:260
+msgid "auto"
+msgstr ""
+
+#: includes/TE_Api.php:261
+msgid "request"
+msgstr ""
+
+#: includes/TE_Api.php:262
+msgid "cron"
+msgstr ""
+
+#: includes/TE_Api.php:264
+msgid "preload"
+msgstr ""
+
+#: includes/TE_Api.php:265
+msgid "dashboard: purge all"
+msgstr ""
+
+#: includes/TE_Api.php:266
+msgid "admin bar: purge all"
+msgstr ""
+
+#: includes/TE_Api.php:267
+msgid "theme/plugin update"
+msgstr ""
+
+#: includes/TE_Api.php:268
+msgid "speculation rules changed"
+msgstr ""
+
+#: includes/TE_Api.php:269
+msgid "upgrade to 1.13.0: new cache keys"
+msgstr ""
+
+#: includes/TE_Api.php:270
+msgid "widgets updated"
+msgstr ""
+
+#: includes/TE_Api.php:271
+msgid "theme switched"
+msgstr ""
+
+#: includes/TE_Api.php:283
+#, php-format
+msgid "admin bar: purge page #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:285
+#, php-format
+msgid "%1$s #%2$s published/updated"
+msgstr ""
+
+#: includes/TE_Api.php:287
+#, php-format
+msgid "%1$s #%2$s unpublished/deleted"
+msgstr ""
+
+#: includes/TE_Api.php:289
+#, php-format
+msgid "comment #%1$s edited"
+msgstr ""
+
+#: includes/TE_Api.php:291
+#, php-format
+msgid "comment #%1$s %2$s"
+msgstr ""
+
+#: includes/TE_Api.php:293
+#, php-format
+msgid "comment #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:295
+#, php-format
+msgid "menu #%1$s updated"
+msgstr ""
+
+#: includes/TE_Api.php:297
+#, php-format
+msgid "plugin activated: %1$s"
+msgstr ""
+
+#: includes/TE_Api.php:299
+#, php-format
+msgid "plugin deactivated: %1$s"
+msgstr ""
+
+#: includes/TE_Api.php:301
+#, php-format
+msgid "%1$s #%2$s edited"
+msgstr ""
+
+#: includes/TE_Api.php:303
+#, php-format
+msgid "%1$s #%2$s deleted"
+msgstr ""
+
+#: includes/TE_Api.php:305
+#, php-format
+msgid "stock change #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:307
+#, php-format
+msgid "media #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:309
+#, php-format
+msgid "product #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:311
+#, php-format
+msgid "+%1$s more"
+msgstr ""
+
+#: includes/TE_Api.php:414 includes/TE_Api.php:516 includes/TE_Api.php:569 includes/TE_Api.php:621
+msgid "No valid API token"
+msgstr ""
+
+#: includes/TE_Api.php:419 includes/TE_Api.php:521 includes/TE_Api.php:574
+msgid "Company ID not configured"
+msgstr ""
+
+#: includes/TE_Api.php:428
+msgid "No valid URLs to purge"
+msgstr ""
+
+#: includes/TE_Api.php:468
+msgid "Purge successful"
+msgstr ""
+
+#: includes/TE_Api.php:468
+#, php-format
+msgid "Purge failed (HTTP %d)"
+msgstr ""
+
+#: includes/TE_Api.php:528
+msgid "No valid URLs to prefetch"
+msgstr ""
+
+#: includes/TE_Api.php:552
+msgid "Prefetch queued"
+msgstr ""
+
+#: includes/TE_Api.php:552
+#, php-format
+msgid "Prefetch failed (HTTP %d)"
+msgstr ""
+
+#: includes/TE_Api.php:579
+msgid "No tags to purge"
+msgstr ""
+
+#: includes/TE_Api.php:608
+msgid "Tag purge successful"
+msgstr ""
+
+#: includes/TE_Api.php:608
+#, php-format
+msgid "Tag purge failed (HTTP %d)"
+msgstr ""
+
+#: includes/speculation/TE_Conflict_Detector.php:56
+msgid "This plugin already outputs its own Speculation Rules. We recommend deactivating it to avoid duplicate prefetches — Transparent Edge Cache includes more complete exclusions and coordination with the CDN."
+msgstr ""
+
+#: includes/speculation/TE_Conflict_Detector.php:57
+msgid "Performance Lab may include the Speculative Loading module, which outputs duplicate rules."
+msgstr ""
+
+#: includes/speculation/TE_Conflict_Detector.php:58
+msgid "Flying Pages prefetches links on viewport with JavaScript, which can duplicate Speculation Rules requests."
+msgstr ""
+
+#: includes/speculation/TE_Conflict_Detector.php:59
+msgid "WP Rocket has the “Preload links” option, which duplicates prefetches."
+msgstr ""
+
+#: includes/speculation/TE_Conflict_Detector.php:60
+msgid "Perfmatters includes instant.page, which duplicates prefetches on hover."
+msgstr ""
+
+#: includes/speculation/TE_Conflict_Detector.php:61
+msgid "NitroPack includes its own prefetch/prerender system."
+msgstr ""
+
 #: includes/security/TE_Hardening.php:94
 msgid "Too many failed login attempts. Please try again in a few minutes."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:99
+#: includes/pagecache/TE_PageCache.php:120
 msgid "WP_CACHE is not set in wp-config.php, so WordPress never loads the cache. Add near the top: define('WP_CACHE', true);"
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:101
+#: includes/pagecache/TE_PageCache.php:122
 msgid "The advanced-cache.php drop-in is missing. Toggle the page cache off and on to rewrite it."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:522
+#: includes/pagecache/TE_PageCache.php:836
 msgid "Another advanced-cache.php drop-in is already installed. Remove it first."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:531
+#: includes/pagecache/TE_PageCache.php:845
 msgid "Could not write advanced-cache.php. Check permissions on wp-content/."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:542
+#: includes/pagecache/TE_PageCache.php:856
 msgid "Origin page cache enabled."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:554
+#: includes/pagecache/TE_PageCache.php:868
 msgid "Origin page cache disabled."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:595
+#: includes/pagecache/TE_PageCache.php:909
+#, php-format
+msgid "Could not locate wp-config.php. Add this near the top manually: %s"
+msgstr ""
+
+#: includes/pagecache/TE_PageCache.php:921
+#, php-format
+msgid "Could not read wp-config.php. Add this near the top manually: %s"
+msgstr ""
+
+#: includes/pagecache/TE_PageCache.php:938
+msgid "wp-config.php already sets WP_CACHE to false. Change it to true to enable the page cache."
+msgstr ""
+
+#: includes/pagecache/TE_PageCache.php:957
 #, php-format
 msgid "wp-config.php is not writable. Add this near the top manually: %s"
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:610
-msgid "wp-config.php already sets WP_CACHE to false. Change it to true to enable the page cache."
-msgstr ""
-
-#: includes/pagecache/TE_PageCache.php:634
+#: includes/pagecache/TE_PageCache.php:981
 msgid "Could not find the <?php opening in wp-config.php. Add this near the top manually: define('WP_CACHE', true);"
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:660
+#: includes/pagecache/TE_PageCache.php:1007
 msgid "Could not update wp-config.php."
 msgstr ""
 
-#: includes/pagecache/TE_PageCache.php:744
+#: includes/pagecache/TE_PageCache.php:1091
 msgid "Page cache flushed."
 msgstr ""
