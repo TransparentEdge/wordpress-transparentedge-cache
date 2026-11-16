@@ -403,7 +403,9 @@ class TE_Headers {
 		// max-age=0 already sent by WordPress or another plugin — must not be made
 		// public here: header() would REPLACE that Cache-Control and the page, with
 		// its per-visitor content or nonces, would be cached and served to everyone.
-		$opt_out = self::opt_out_reason();
+		// WordPress itself sends no-cache headers on every 404 (WP::handle_404):
+		// that is not a page opting out, and 404s keep their own short profile.
+		$opt_out = is_404() ? '' : self::opt_out_reason();
 		if ( '' !== $opt_out ) {
 			if ( 'DONOTCACHEPAGE' === $opt_out ) {
 				self::send_nocache_headers();
@@ -842,6 +844,12 @@ VCL;
 		$list = get_option( self::OPT_OUT_OPTION, array() );
 		$list = is_array( $list ) ? $list : array();
 		if ( isset( $list[ $path ] ) && $list[ $path ]['r'] === $reason ) {
+			return;
+		}
+		// At most one write a minute: a crawler walking many such URLs must not
+		// turn every request into a database write.
+		$newest = $list ? reset( $list ) : null;
+		if ( $newest && ( time() - (int) $newest['t'] ) < 60 ) {
 			return;
 		}
 		unset( $list[ $path ] );
