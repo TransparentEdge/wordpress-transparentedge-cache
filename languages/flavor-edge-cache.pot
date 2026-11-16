@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: Transparent Edge Cache 1.14.0\n"
-"POT-Creation-Date: 2026-11-16 11:56+0000\n"
+"POT-Creation-Date: 2026-11-16 15:03+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -2185,170 +2185,170 @@ msgstr ""
 msgid "Connection successful! Your credentials are valid."
 msgstr ""
 
-#: includes/TE_Api.php:260
-msgid "auto"
-msgstr ""
-
-#: includes/TE_Api.php:261
-msgid "request"
-msgstr ""
-
-#: includes/TE_Api.php:262
-msgid "cron"
-msgstr ""
-
-#: includes/TE_Api.php:264
-msgid "preload"
-msgstr ""
-
-#: includes/TE_Api.php:265
-msgid "dashboard: purge all"
-msgstr ""
-
-#: includes/TE_Api.php:266
-msgid "admin bar: purge all"
-msgstr ""
-
-#: includes/TE_Api.php:267
-msgid "theme/plugin update"
-msgstr ""
-
-#: includes/TE_Api.php:268
-msgid "speculation rules changed"
-msgstr ""
-
-#: includes/TE_Api.php:269
-msgid "upgrade to 1.13.0: new cache keys"
-msgstr ""
-
-#: includes/TE_Api.php:270
-msgid "widgets updated"
-msgstr ""
-
-#: includes/TE_Api.php:271
-msgid "theme switched"
-msgstr ""
-
-#: includes/TE_Api.php:283
-#, php-format
-msgid "admin bar: purge page #%1$s"
-msgstr ""
-
-#: includes/TE_Api.php:285
-#, php-format
-msgid "%1$s #%2$s published/updated"
-msgstr ""
-
-#: includes/TE_Api.php:287
-#, php-format
-msgid "%1$s #%2$s unpublished/deleted"
-msgstr ""
-
-#: includes/TE_Api.php:289
-#, php-format
-msgid "comment #%1$s edited"
-msgstr ""
-
-#: includes/TE_Api.php:291
-#, php-format
-msgid "comment #%1$s %2$s"
-msgstr ""
-
-#: includes/TE_Api.php:293
-#, php-format
-msgid "comment #%1$s"
-msgstr ""
-
-#: includes/TE_Api.php:295
-#, php-format
-msgid "menu #%1$s updated"
-msgstr ""
-
-#: includes/TE_Api.php:297
-#, php-format
-msgid "plugin activated: %1$s"
-msgstr ""
-
-#: includes/TE_Api.php:299
-#, php-format
-msgid "plugin deactivated: %1$s"
-msgstr ""
-
-#: includes/TE_Api.php:301
-#, php-format
-msgid "%1$s #%2$s edited"
-msgstr ""
-
-#: includes/TE_Api.php:303
-#, php-format
-msgid "%1$s #%2$s deleted"
-msgstr ""
-
-#: includes/TE_Api.php:305
-#, php-format
-msgid "stock change #%1$s"
-msgstr ""
-
-#: includes/TE_Api.php:307
-#, php-format
-msgid "media #%1$s"
-msgstr ""
-
-#: includes/TE_Api.php:309
-#, php-format
-msgid "product #%1$s"
-msgstr ""
-
-#: includes/TE_Api.php:311
-#, php-format
-msgid "+%1$s more"
-msgstr ""
-
-#: includes/TE_Api.php:414 includes/TE_Api.php:516 includes/TE_Api.php:569 includes/TE_Api.php:621
-msgid "No valid API token"
-msgstr ""
-
-#: includes/TE_Api.php:419 includes/TE_Api.php:521 includes/TE_Api.php:574
-msgid "Company ID not configured"
-msgstr ""
-
-#: includes/TE_Api.php:428
-msgid "No valid URLs to purge"
-msgstr ""
-
-#: includes/TE_Api.php:468
+#: includes/TE_Api.php:260 includes/TE_Api.php:505
 msgid "Purge successful"
 msgstr ""
 
-#: includes/TE_Api.php:468
+#: includes/TE_Api.php:261 includes/TE_Api.php:645
+msgid "Tag purge successful"
+msgstr ""
+
+#: includes/TE_Api.php:262 includes/TE_Api.php:589
+msgid "Prefetch queued"
+msgstr ""
+
+#: includes/TE_Api.php:263 includes/TE_Api.php:451 includes/TE_Api.php:553 includes/TE_Api.php:606 includes/TE_Api.php:658
+msgid "No valid API token"
+msgstr ""
+
+#: includes/TE_Api.php:264 includes/TE_Api.php:456 includes/TE_Api.php:558 includes/TE_Api.php:611
+msgid "Company ID not configured"
+msgstr ""
+
+#: includes/TE_Api.php:265 includes/TE_Api.php:465
+msgid "No valid URLs to purge"
+msgstr ""
+
+#: includes/TE_Api.php:266 includes/TE_Api.php:565
+msgid "No valid URLs to prefetch"
+msgstr ""
+
+#: includes/TE_Api.php:267 includes/TE_Api.php:616
+msgid "No tags to purge"
+msgstr ""
+
+#: includes/TE_Api.php:275 includes/TE_Api.php:505
 #, php-format
 msgid "Purge failed (HTTP %d)"
 msgstr ""
 
-#: includes/TE_Api.php:528
-msgid "No valid URLs to prefetch"
+#: includes/TE_Api.php:277 includes/TE_Api.php:645
+#, php-format
+msgid "Tag purge failed (HTTP %d)"
 msgstr ""
 
-#: includes/TE_Api.php:552
-msgid "Prefetch queued"
-msgstr ""
-
-#: includes/TE_Api.php:552
+#: includes/TE_Api.php:279 includes/TE_Api.php:589
 #, php-format
 msgid "Prefetch failed (HTTP %d)"
 msgstr ""
 
-#: includes/TE_Api.php:579
-msgid "No tags to purge"
+#: includes/TE_Api.php:297
+msgid "auto"
 msgstr ""
 
-#: includes/TE_Api.php:608
-msgid "Tag purge successful"
+#: includes/TE_Api.php:298
+msgid "request"
 msgstr ""
 
-#: includes/TE_Api.php:608
+#: includes/TE_Api.php:299
+msgid "cron"
+msgstr ""
+
+#: includes/TE_Api.php:301
+msgid "preload"
+msgstr ""
+
+#: includes/TE_Api.php:302
+msgid "dashboard: purge all"
+msgstr ""
+
+#: includes/TE_Api.php:303
+msgid "admin bar: purge all"
+msgstr ""
+
+#: includes/TE_Api.php:304
+msgid "theme/plugin update"
+msgstr ""
+
+#: includes/TE_Api.php:305
+msgid "speculation rules changed"
+msgstr ""
+
+#: includes/TE_Api.php:306
+msgid "upgrade to 1.13.0: new cache keys"
+msgstr ""
+
+#: includes/TE_Api.php:307
+msgid "widgets updated"
+msgstr ""
+
+#: includes/TE_Api.php:308
+msgid "theme switched"
+msgstr ""
+
+#: includes/TE_Api.php:320
 #, php-format
-msgid "Tag purge failed (HTTP %d)"
+msgid "admin bar: purge page #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:322
+#, php-format
+msgid "%1$s #%2$s published/updated"
+msgstr ""
+
+#: includes/TE_Api.php:324
+#, php-format
+msgid "%1$s #%2$s unpublished/deleted"
+msgstr ""
+
+#: includes/TE_Api.php:326
+#, php-format
+msgid "comment #%1$s edited"
+msgstr ""
+
+#: includes/TE_Api.php:328
+#, php-format
+msgid "comment #%1$s %2$s"
+msgstr ""
+
+#: includes/TE_Api.php:330
+#, php-format
+msgid "comment #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:332
+#, php-format
+msgid "menu #%1$s updated"
+msgstr ""
+
+#: includes/TE_Api.php:334
+#, php-format
+msgid "plugin activated: %1$s"
+msgstr ""
+
+#: includes/TE_Api.php:336
+#, php-format
+msgid "plugin deactivated: %1$s"
+msgstr ""
+
+#: includes/TE_Api.php:338
+#, php-format
+msgid "%1$s #%2$s edited"
+msgstr ""
+
+#: includes/TE_Api.php:340
+#, php-format
+msgid "%1$s #%2$s deleted"
+msgstr ""
+
+#: includes/TE_Api.php:342
+#, php-format
+msgid "stock change #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:344
+#, php-format
+msgid "media #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:346
+#, php-format
+msgid "product #%1$s"
+msgstr ""
+
+#: includes/TE_Api.php:348
+#, php-format
+msgid "+%1$s more"
 msgstr ""
 
 #: includes/speculation/TE_Conflict_Detector.php:56

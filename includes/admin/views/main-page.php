@@ -1241,9 +1241,9 @@ defined( 'ABSPATH' ) || exit;
 							<td><code style="white-space:normal;word-break:break-all;"><?php echo esc_html( implode( ' ', $fe_items ) . $fe_more ); ?></code></td>
 							<td>
 								<?php if ( ! empty( $fe_e['ok'] ) ) : ?>
-									<span style="color:#155724;font-weight:600;">✓</span> <?php echo esc_html( (string) ( $fe_e['msg'] ?? '' ) ); ?>
+									<span style="color:#155724;font-weight:600;">✓</span> <?php echo esc_html( \flavor_edge\TE_Api::message_label( (string) ( $fe_e['msg'] ?? '' ) ) ); ?>
 								<?php else : ?>
-									<span style="color:#b32d2e;font-weight:600;">✗</span> <?php echo esc_html( (string) ( $fe_e['msg'] ?? '' ) ); ?>
+									<span style="color:#b32d2e;font-weight:600;">✗</span> <?php echo esc_html( \flavor_edge\TE_Api::message_label( (string) ( $fe_e['msg'] ?? '' ) ) ); ?>
 								<?php endif; ?>
 							</td>
 							<td><?php echo esc_html( (string) ( $fe_e['user'] ?? '' ) ); ?></td>

@@ -4,7 +4,7 @@ msgstr ""
 "Project-Id-Version: Transparent Edge Cache 1.14.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-21 16:09+0000\n"
-"PO-Revision-Date: 2026-11-16 11:56+0000\n"
+"PO-Revision-Date: 2026-11-16 15:03+0000\n"
 "Language: es_ES\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2194,171 +2194,171 @@ msgstr "Autenticación fallida (HTTP %d). Revisa tu Client ID y Client Secret."
 msgid "Connection successful! Your credentials are valid."
 msgstr "¡Conexión exitosa! Tus credenciales son válidas."
 
-#: includes/TE_Api.php:260
-msgid "auto"
-msgstr "automática"
-
-#: includes/TE_Api.php:261
-msgid "request"
-msgstr "petición"
-
-#: includes/TE_Api.php:262
-msgid "cron"
-msgstr "cron"
-
-#: includes/TE_Api.php:264
-msgid "preload"
-msgstr "precarga"
-
-#: includes/TE_Api.php:265
-msgid "dashboard: purge all"
-msgstr "panel: purgar todo"
-
-#: includes/TE_Api.php:266
-msgid "admin bar: purge all"
-msgstr "barra de admin: purgar todo"
-
-#: includes/TE_Api.php:267
-msgid "theme/plugin update"
-msgstr "actualización de tema/plugin"
-
-#: includes/TE_Api.php:268
-msgid "speculation rules changed"
-msgstr "cambio en Speculation Rules"
-
-#: includes/TE_Api.php:269
-msgid "upgrade to 1.13.0: new cache keys"
-msgstr "actualización a 1.13.0: claves de caché nuevas"
-
-#: includes/TE_Api.php:270
-msgid "widgets updated"
-msgstr "widgets actualizados"
-
-#: includes/TE_Api.php:271
-msgid "theme switched"
-msgstr "cambio de tema"
-
-#: includes/TE_Api.php:283
-#, php-format
-msgid "admin bar: purge page #%1$s"
-msgstr "barra de admin: purgar página #%1$s"
-
-#: includes/TE_Api.php:285
-#, php-format
-msgid "%1$s #%2$s published/updated"
-msgstr "%1$s #%2$s publicado/actualizado"
-
-#: includes/TE_Api.php:287
-#, php-format
-msgid "%1$s #%2$s unpublished/deleted"
-msgstr "%1$s #%2$s despublicado/borrado"
-
-#: includes/TE_Api.php:289
-#, php-format
-msgid "comment #%1$s edited"
-msgstr "comentario #%1$s editado"
-
-#: includes/TE_Api.php:291
-#, php-format
-msgid "comment #%1$s %2$s"
-msgstr "comentario #%1$s %2$s"
-
-#: includes/TE_Api.php:293
-#, php-format
-msgid "comment #%1$s"
-msgstr "comentario #%1$s"
-
-#: includes/TE_Api.php:295
-#, php-format
-msgid "menu #%1$s updated"
-msgstr "menú #%1$s actualizado"
-
-#: includes/TE_Api.php:297
-#, php-format
-msgid "plugin activated: %1$s"
-msgstr "plugin activado: %1$s"
-
-#: includes/TE_Api.php:299
-#, php-format
-msgid "plugin deactivated: %1$s"
-msgstr "plugin desactivado: %1$s"
-
-#: includes/TE_Api.php:301
-#, php-format
-msgid "%1$s #%2$s edited"
-msgstr "%1$s #%2$s editado"
-
-#: includes/TE_Api.php:303
-#, php-format
-msgid "%1$s #%2$s deleted"
-msgstr "%1$s #%2$s borrado"
-
-#: includes/TE_Api.php:305
-#, php-format
-msgid "stock change #%1$s"
-msgstr "cambio de stock #%1$s"
-
-#: includes/TE_Api.php:307
-#, php-format
-msgid "media #%1$s"
-msgstr "medio #%1$s"
-
-#: includes/TE_Api.php:309
-#, php-format
-msgid "product #%1$s"
-msgstr "producto #%1$s"
-
-#: includes/TE_Api.php:311
-#, php-format
-msgid "+%1$s more"
-msgstr "+%1$s más"
-
-#: includes/TE_Api.php:414 includes/TE_Api.php:516 includes/TE_Api.php:569 includes/TE_Api.php:621
-msgid "No valid API token"
-msgstr "No hay un token de API válido"
-
-#: includes/TE_Api.php:419 includes/TE_Api.php:521 includes/TE_Api.php:574
-msgid "Company ID not configured"
-msgstr "Company ID sin configurar"
-
-#: includes/TE_Api.php:428
-msgid "No valid URLs to purge"
-msgstr "No hay URLs válidas que purgar"
-
-#: includes/TE_Api.php:468
+#: includes/TE_Api.php:260 includes/TE_Api.php:505
 msgid "Purge successful"
 msgstr "Purga correcta"
 
-#: includes/TE_Api.php:468
+#: includes/TE_Api.php:261 includes/TE_Api.php:645
+msgid "Tag purge successful"
+msgstr "Purga por etiquetas correcta"
+
+#: includes/TE_Api.php:262 includes/TE_Api.php:589
+msgid "Prefetch queued"
+msgstr "Precarga en cola"
+
+#: includes/TE_Api.php:263 includes/TE_Api.php:451 includes/TE_Api.php:553 includes/TE_Api.php:606 includes/TE_Api.php:658
+msgid "No valid API token"
+msgstr "No hay un token de API válido"
+
+#: includes/TE_Api.php:264 includes/TE_Api.php:456 includes/TE_Api.php:558 includes/TE_Api.php:611
+msgid "Company ID not configured"
+msgstr "Company ID sin configurar"
+
+#: includes/TE_Api.php:265 includes/TE_Api.php:465
+msgid "No valid URLs to purge"
+msgstr "No hay URLs válidas que purgar"
+
+#: includes/TE_Api.php:266 includes/TE_Api.php:565
+msgid "No valid URLs to prefetch"
+msgstr "No hay URLs válidas que precargar"
+
+#: includes/TE_Api.php:267 includes/TE_Api.php:616
+msgid "No tags to purge"
+msgstr "No hay etiquetas que purgar"
+
+#: includes/TE_Api.php:275 includes/TE_Api.php:505
 #, php-format
 msgid "Purge failed (HTTP %d)"
 msgstr "La purga ha fallado (HTTP %d)"
 
-#: includes/TE_Api.php:528
-msgid "No valid URLs to prefetch"
-msgstr "No hay URLs válidas que precargar"
+#: includes/TE_Api.php:277 includes/TE_Api.php:645
+#, php-format
+msgid "Tag purge failed (HTTP %d)"
+msgstr "La purga por etiquetas ha fallado (HTTP %d)"
 
-#: includes/TE_Api.php:552
-msgid "Prefetch queued"
-msgstr "Precarga en cola"
-
-#: includes/TE_Api.php:552
+#: includes/TE_Api.php:279 includes/TE_Api.php:589
 #, php-format
 msgid "Prefetch failed (HTTP %d)"
 msgstr "La precarga ha fallado (HTTP %d)"
 
-#: includes/TE_Api.php:579
-msgid "No tags to purge"
-msgstr "No hay etiquetas que purgar"
+#: includes/TE_Api.php:297
+msgid "auto"
+msgstr "automática"
 
-#: includes/TE_Api.php:608
-msgid "Tag purge successful"
-msgstr "Purga por etiquetas correcta"
+#: includes/TE_Api.php:298
+msgid "request"
+msgstr "petición"
 
-#: includes/TE_Api.php:608
+#: includes/TE_Api.php:299
+msgid "cron"
+msgstr "cron"
+
+#: includes/TE_Api.php:301
+msgid "preload"
+msgstr "precarga"
+
+#: includes/TE_Api.php:302
+msgid "dashboard: purge all"
+msgstr "panel: purgar todo"
+
+#: includes/TE_Api.php:303
+msgid "admin bar: purge all"
+msgstr "barra de admin: purgar todo"
+
+#: includes/TE_Api.php:304
+msgid "theme/plugin update"
+msgstr "actualización de tema/plugin"
+
+#: includes/TE_Api.php:305
+msgid "speculation rules changed"
+msgstr "cambio en Speculation Rules"
+
+#: includes/TE_Api.php:306
+msgid "upgrade to 1.13.0: new cache keys"
+msgstr "actualización a 1.13.0: claves de caché nuevas"
+
+#: includes/TE_Api.php:307
+msgid "widgets updated"
+msgstr "widgets actualizados"
+
+#: includes/TE_Api.php:308
+msgid "theme switched"
+msgstr "cambio de tema"
+
+#: includes/TE_Api.php:320
 #, php-format
-msgid "Tag purge failed (HTTP %d)"
-msgstr "La purga por etiquetas ha fallado (HTTP %d)"
+msgid "admin bar: purge page #%1$s"
+msgstr "barra de admin: purgar página #%1$s"
+
+#: includes/TE_Api.php:322
+#, php-format
+msgid "%1$s #%2$s published/updated"
+msgstr "%1$s #%2$s publicado/actualizado"
+
+#: includes/TE_Api.php:324
+#, php-format
+msgid "%1$s #%2$s unpublished/deleted"
+msgstr "%1$s #%2$s despublicado/borrado"
+
+#: includes/TE_Api.php:326
+#, php-format
+msgid "comment #%1$s edited"
+msgstr "comentario #%1$s editado"
+
+#: includes/TE_Api.php:328
+#, php-format
+msgid "comment #%1$s %2$s"
+msgstr "comentario #%1$s %2$s"
+
+#: includes/TE_Api.php:330
+#, php-format
+msgid "comment #%1$s"
+msgstr "comentario #%1$s"
+
+#: includes/TE_Api.php:332
+#, php-format
+msgid "menu #%1$s updated"
+msgstr "menú #%1$s actualizado"
+
+#: includes/TE_Api.php:334
+#, php-format
+msgid "plugin activated: %1$s"
+msgstr "plugin activado: %1$s"
+
+#: includes/TE_Api.php:336
+#, php-format
+msgid "plugin deactivated: %1$s"
+msgstr "plugin desactivado: %1$s"
+
+#: includes/TE_Api.php:338
+#, php-format
+msgid "%1$s #%2$s edited"
+msgstr "%1$s #%2$s editado"
+
+#: includes/TE_Api.php:340
+#, php-format
+msgid "%1$s #%2$s deleted"
+msgstr "%1$s #%2$s borrado"
+
+#: includes/TE_Api.php:342
+#, php-format
+msgid "stock change #%1$s"
+msgstr "cambio de stock #%1$s"
+
+#: includes/TE_Api.php:344
+#, php-format
+msgid "media #%1$s"
+msgstr "medio #%1$s"
+
+#: includes/TE_Api.php:346
+#, php-format
+msgid "product #%1$s"
+msgstr "producto #%1$s"
+
+#: includes/TE_Api.php:348
+#, php-format
+msgid "+%1$s more"
+msgstr "+%1$s más"
 
 #: includes/speculation/TE_Conflict_Detector.php:56
 msgid "This plugin already outputs its own Speculation Rules. We recommend deactivating it to avoid duplicate prefetches — Transparent Edge Cache includes more complete exclusions and coordination with the CDN."

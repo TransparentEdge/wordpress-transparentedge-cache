@@ -247,6 +247,43 @@ class TE_Api {
 	}
 
 		/**
+	 * Translate a result message stored by a version that kept them in English
+	 * (before 1.14.0 the API messages were not translatable). Newer entries are
+	 * already in the site's language and pass through unchanged.
+	 *
+	 * @param string $msg Stored message.
+	 * @return string
+	 */
+	public static function message_label( $msg ) {
+		$msg   = (string) $msg;
+		$fixed = array(
+			'Purge successful'          => __( 'Purge successful', 'flavor-edge-cache' ),
+			'Tag purge successful'      => __( 'Tag purge successful', 'flavor-edge-cache' ),
+			'Prefetch queued'           => __( 'Prefetch queued', 'flavor-edge-cache' ),
+			'No valid API token'        => __( 'No valid API token', 'flavor-edge-cache' ),
+			'Company ID not configured' => __( 'Company ID not configured', 'flavor-edge-cache' ),
+			'No valid URLs to purge'    => __( 'No valid URLs to purge', 'flavor-edge-cache' ),
+			'No valid URLs to prefetch' => __( 'No valid URLs to prefetch', 'flavor-edge-cache' ),
+			'No tags to purge'          => __( 'No tags to purge', 'flavor-edge-cache' ),
+		);
+		if ( isset( $fixed[ $msg ] ) ) {
+			return $fixed[ $msg ];
+		}
+		if ( preg_match( '/^(Purge|Tag purge|Prefetch) failed \(HTTP (\d+)\)$/', $msg, $m ) ) {
+			$fmt = array(
+				/* translators: %d: HTTP status code */
+				'Purge'     => __( 'Purge failed (HTTP %d)', 'flavor-edge-cache' ),
+				/* translators: %d: HTTP status code */
+				'Tag purge' => __( 'Tag purge failed (HTTP %d)', 'flavor-edge-cache' ),
+				/* translators: %d: HTTP status code */
+				'Prefetch'  => __( 'Prefetch failed (HTTP %d)', 'flavor-edge-cache' ),
+			);
+			return sprintf( $fmt[ $m[1] ], (int) $m[2] );
+		}
+		return $msg;
+	}
+
+	/**
 	 * Human label, in the site's language, for a stored purge-log context. The
 	 * context is stored in English (stable data, also printed by WP-CLI) and
 	 * translated only for display.
