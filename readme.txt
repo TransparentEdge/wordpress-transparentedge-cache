@@ -4,7 +4,7 @@ Tags: cache, cdn, varnish, performance, wpo, optimization, woocommerce, security
 Requires at least: 5.5
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.13.1
+Stable tag: 1.14.0
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -114,6 +114,14 @@ The plugin registers a `wp te-cache` command for operations and deploy pipelines
 Soft purge is the default; add `--hard` to force an immediate purge. The commands are thin wrappers over the same hardened purge/preload APIs the plugin uses internally.
 
 == Changelog ==
+
+= 1.14.0 =
+* Pages that opt out of caching are respected: a page with DONOTCACHEPAGE (WooCommerce, forms, membership plugins…), or a Cache-Control: private / no-store / no-cache / max-age=0 sent by WordPress or another plugin, is served uncached and never stored in the origin page cache — the plugin no longer replaces that header with a public one. DONOTCACHEPAGE defined while the page renders (e.g. by a form shortcode) is honoured too. The Cache tab lists the latest pages that opted out, so a plugin that disables caching site-wide is easy to spot. Filter: flavor_edge_respect_page_opt_out.
+* Complete Spanish translation, including the admin JavaScript messages, the History tab and API messages. Developer tools to regenerate the translation files and a check that fails on any untranslated string.
+* Theme/plugin updates trigger a site purge only for theme or plugin updates (not translation packs or core updates), at most once per request. Filter: flavor_edge_purge_on_asset_change.
+* Removed an unused setting (debounce_seconds; the debounce remains, filter flavor_edge_purge_debounce_seconds) and code that tried to set headers on static files from PHP (static files are served by the web server).
+* Origin page cache: stored entries are read without allowing PHP objects; CORS, Server-Timing and X-Request-Id headers are never stored.
+* Cookie diagnostic verifies TLS on its request to the site; admin JavaScript no longer writes debug output to the browser console.
 
 = 1.13.1 =
 * Origin page cache: a page served from the origin page cache now carries the same headers as a fresh render — security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS, CSP) and any other header the site sets. Previously only Cache-Control, Vary, Surrogate-Keys, Link and Content-Language were kept. Per-request headers (Set-Cookie, Date, ETag, Content-Length…) are never stored. Filter: flavor_edge_pc_replayed_headers.
