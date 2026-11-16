@@ -118,7 +118,7 @@ VCL;
 			'timeout'     => 5,
 			'redirection' => 0,
 			'cookies'     => array(),
-			'sslverify'   => false,
+			'sslverify'   => (bool) apply_filters( 'https_local_ssl_verify', true ),
 			'headers'     => array( 'User-Agent' => 'FlavorEdgeCache-CookieProbe/1.0' ),
 		) );
 

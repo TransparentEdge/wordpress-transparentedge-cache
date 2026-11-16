@@ -433,7 +433,7 @@ class TE_PageCache {
 		if ( '' === $html || http_response_code() !== 200 ) {
 			return $html;
 		}
-		if ( is_user_logged_in() || is_404() || is_search() ) {
+		if ( is_user_logged_in() || is_404() || is_search() || ( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE ) ) {
 			return $html;
 		}
 
@@ -563,6 +563,8 @@ class TE_PageCache {
 			'connection', 'keep-alive', 'date', 'age', 'expires', 'pragma', 'last-modified', 'etag',
 			'server', 'x-powered-by', 'location', 'status', 'refresh', 'www-authenticate',
 			'x-flavoredge-pagecache', 'x-flavor-edge-keys', 'x-flavor-edge-ttl', 'x-redirect-by', 'x-pingback',
+			// Depend on the request (CORS echoes the caller's Origin) or are timing.
+			'access-control-allow-origin', 'access-control-allow-credentials', 'server-timing', 'x-request-id',
 		);
 		$headers = array();
 		foreach ( ( null === $list ? headers_list() : (array) $list ) as $h ) {

@@ -581,6 +581,20 @@ defined( 'ABSPATH' ) || exit;
 					</td>
 				</tr>
 
+				<?php $fe_opted = get_option( \flavor_edge\TE_Headers::OPT_OUT_OPTION, array() ); ?>
+				<?php if ( ! empty( $fe_opted ) && is_array( $fe_opted ) ) : ?>
+				<tr>
+					<th><?php esc_html_e( 'Pages that opted out of caching', 'flavor-edge-cache' ); ?></th>
+					<td>
+						<p class="description" style="margin-top:0;"><?php esc_html_e( 'These pages asked not to be cached (DONOTCACHEPAGE, or a Cache-Control: private / no-store / no-cache sent by WordPress or another plugin), so they are served uncached. Expected for carts, checkouts, accounts or forms; if ordinary pages show up here, a plugin is disabling caching for them (for example by starting a PHP session on every page).', 'flavor-edge-cache' ); ?></p>
+						<ul style="margin:6px 0 0;">
+						<?php foreach ( array_slice( $fe_opted, 0, 20, true ) as $fe_path => $fe_info ) : ?>
+							<li><code><?php echo esc_html( $fe_path ); ?></code> — <?php echo esc_html( (string) ( $fe_info['r'] ?? '' ) ); ?> <span class="description">(<?php echo esc_html( wp_date( 'Y-m-d H:i', (int) ( $fe_info['t'] ?? 0 ) ) ); ?>)</span></li>
+						<?php endforeach; ?>
+						</ul>
+					</td>
+				</tr>
+				<?php endif; ?>
 				<tr>
 					<th colspan="2"><h3 style="margin:0"><?php esc_html_e( 'Cache Variants', 'flavor-edge-cache' ); ?></h3></th>
 				</tr>

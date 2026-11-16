@@ -23,7 +23,6 @@
         });
     }
 
-    console.log('[TE Cache] Admin JS loaded. AJAX URL:', FE.ajaxUrl);
 
     // -------------------------------------------------------------------------
     // Tabs.
@@ -57,10 +56,8 @@
             client_secret: $('#client_secret').val()
         };
 
-        console.log('[TE Cache] Testing connection...', { company_id: data.company_id, client_id: data.client_id });
 
         $.post(FE.ajaxUrl, data, function (res) {
-            console.log('[TE Cache] Test connection response:', res);
             $btn.prop('disabled', false);
             if (res && res.success) {
                 $status.text('✓ ' + res.message).addClass('te-status-success');
@@ -112,10 +109,6 @@
             }
         });
 
-        console.log('[TE Cache] Saving settings:', Object.keys(formData).length, 'fields');
-        console.log('[TE Cache] speculation_mode:', formData['speculation_mode'] || 'NOT SET');
-        console.log('[TE Cache] speculation_injection:', formData['speculation_injection'] || 'NOT SET');
-        console.log('[TE Cache] speculation_post_types:', formData['speculation_post_types'] || 'NOT SET');
 
         $btn.prop('disabled', true);
         $status.text(FE.strings.saving).removeClass('te-status-success te-status-error');
@@ -125,7 +118,6 @@
             nonce:    FE.nonce,
             settings: formData
         }, function (res) {
-            console.log('[TE Cache] Save response:', res);
             $btn.prop('disabled', false);
             if (res && res.success) {
                 $status.text('✓ ' + FE.strings.saved).addClass('te-status-success');
@@ -155,7 +147,6 @@
             action: 'flavor_edge_purge_all',
             nonce:  FE.nonce
         }, function (res) {
-            console.log('[TE Cache] Purge all response:', res);
             $btn.prop('disabled', false);
             if (res && res.success) {
                 $btn.text('✓ ' + FE.strings.purged);
@@ -246,7 +237,6 @@
         $status.text('').removeClass('te-status-error te-status-success');
 
         $.post(FE.ajaxUrl, data, function (res) {
-            console.log('[TE Cache] Wizard response:', res);
             $btn.prop('disabled', false);
             if (res && res.success) {
                 $status.text('✓ ' + (res.data || t('Done!'))).addClass('te-status-success');
@@ -290,7 +280,6 @@
             action: 'flavor_edge_preload_start',
             nonce:  FE.nonce
         }, function (res) {
-            console.log('[TE Cache] Preload queued:', res);
             if (res && res.success) {
                 $btn.text(t('Warming cache...')).hide();
                 $stop.show();

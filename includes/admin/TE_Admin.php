@@ -395,7 +395,7 @@ class TE_Admin {
 			'page_cache_ttl',
 			'static_s_maxage', 'static_max_age',
 			'i3_quality_jpeg', 'i3_quality_webp', 'i3_s_maxage', 'i3_max_age',
-			'debounce_seconds', 'heartbeat_interval',
+			'heartbeat_interval',
 			'harden_login_max_attempts', 'sec_header_hsts_maxage',
 			'preload_offpeak_start', 'preload_offpeak_end',
 		);

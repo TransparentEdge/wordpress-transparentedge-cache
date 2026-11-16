@@ -86,7 +86,6 @@ class TE_Settings {
 			'purge_on_theme_switch' => true,
 			'purge_on_plugin_change' => true,
 			'publish_refresh_singles' => false,  // Opt-in: on publish, also refresh every single of the same type (themes with a "latest" block in singles). Off: publish refreshes the post and its listings only.
-			'debounce_seconds'      => 2,
 
 			// i3 Image optimization.
 			'i3_enabled'            => false,

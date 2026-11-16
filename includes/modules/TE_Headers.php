@@ -129,7 +129,18 @@ class TE_Headers {
 	 * @return string Unchanged output.
 	 */
 	public static function flush_rendered_keys( $html ) {
-		if ( empty( self::$rendered_keys ) || headers_sent() ) {
+		if ( headers_sent() ) {
+			return $html;
+		}
+		// Opted out while rendering (e.g. a form shortcode defining DONOTCACHEPAGE):
+		// take back the public headers sent at template_redirect.
+		if ( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE && apply_filters( 'flavor_edge_respect_page_opt_out', true ) ) {
+			header_remove( 'Surrogate-Keys' );
+			self::send_nocache_headers();
+			self::remember_opt_out( 'DONOTCACHEPAGE' );
+			return $html;
+		}
+		if ( empty( self::$rendered_keys ) || ! TE_Settings::get( 'surrogate_keys', true ) ) {
 			return $html;
 		}
 		$new = array_diff( array_keys( self::$rendered_keys ), self::$surrogate_keys );
@@ -387,6 +398,20 @@ class TE_Headers {
 			return;
 		}
 
+		// A page that opted out of caching — DONOTCACHEPAGE (WooCommerce, forms,
+		// membership plugins…) or a Cache-Control: private / no-store / no-cache /
+		// max-age=0 already sent by WordPress or another plugin — must not be made
+		// public here: header() would REPLACE that Cache-Control and the page, with
+		// its per-visitor content or nonces, would be cached and served to everyone.
+		$opt_out = self::opt_out_reason();
+		if ( '' !== $opt_out ) {
+			if ( 'DONOTCACHEPAGE' === $opt_out ) {
+				self::send_nocache_headers();
+			}
+			self::remember_opt_out( $opt_out );
+			return;
+		}
+
 		$settings = TE_Settings::get_all();
 
 		// Cache-Control: resolve the per-template TTL profile (the homepage can
@@ -404,11 +429,12 @@ class TE_Headers {
 		// Surrogate-Keys.
 		if ( $settings['surrogate_keys'] && ! empty( self::$surrogate_keys ) ) {
 			header( 'Surrogate-Keys: ' . implode( ' ', self::$surrogate_keys ) );
-			// Buffer the body so keys found while it renders (secondary loops) can
-			// still be added to the header before it is sent.
-			if ( self::$collecting ) {
-				ob_start( array( __CLASS__, 'flush_rendered_keys' ) );
-			}
+		}
+		// Buffer the body so what is learnt while it renders can still change the
+		// headers before they are sent: keys from secondary loops, and a
+		// DONOTCACHEPAGE defined by a shortcode/block inside the content.
+		if ( self::$collecting ) {
+			ob_start( array( __CLASS__, 'flush_rendered_keys' ) );
 		}
 
 		// Vary. Emit the safe set now AND re-assert it right before PHP sends
@@ -772,6 +798,55 @@ VCL;
 		}
 
 		return false;
+	}
+
+	/** Option listing the latest pages that opted out of caching (diagnostic). */
+	const OPT_OUT_OPTION = 'flavor_edge_opted_out_pages';
+
+	/**
+	 * Why the current response must stay uncached, or '' when it may be cached.
+	 *
+	 * @param array|null $headers Header lines to inspect (default: headers_list()).
+	 * @return string 'DONOTCACHEPAGE', the Cache-Control header that forbids it, or ''.
+	 */
+	public static function opt_out_reason( $headers = null ) {
+		if ( ! apply_filters( 'flavor_edge_respect_page_opt_out', true ) ) {
+			return '';
+		}
+		if ( defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE ) {
+			return 'DONOTCACHEPAGE';
+		}
+		foreach ( ( null === $headers ? headers_list() : (array) $headers ) as $h ) {
+			if ( 0 !== stripos( $h, 'cache-control:' ) ) {
+				continue;
+			}
+			$v = strtolower( $h );
+			if ( false !== strpos( $v, 'no-store' ) || false !== strpos( $v, 'no-cache' )
+				|| false !== strpos( $v, 'private' ) || preg_match( '/max-age\s*=\s*0(?![0-9])/', $v ) ) {
+				return trim( substr( $h, 0, 120 ) );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Keep a short list (20) of paths that opted out, shown in the panel so an
+	 * admin can spot a plugin that disables caching site-wide (e.g. one that
+	 * starts a PHP session on every page). Written only when a new path appears.
+	 *
+	 * @param string $reason Opt-out reason.
+	 */
+	private static function remember_opt_out( $reason ) {
+		$path = isset( $_SERVER['REQUEST_URI'] ) ? (string) strtok( wp_unslash( $_SERVER['REQUEST_URI'] ), '?' ) : '/';
+		$path = substr( sanitize_text_field( $path ), 0, 200 );
+		$list = get_option( self::OPT_OUT_OPTION, array() );
+		$list = is_array( $list ) ? $list : array();
+		if ( isset( $list[ $path ] ) && $list[ $path ]['r'] === $reason ) {
+			return;
+		}
+		unset( $list[ $path ] );
+		$list = array( $path => array( 'r' => $reason, 't' => time() ) ) + $list;
+		update_option( self::OPT_OUT_OPTION, array_slice( $list, 0, 20, true ), false );
 	}
 
 	/**

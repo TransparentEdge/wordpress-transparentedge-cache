@@ -41,9 +41,6 @@ class TE_BrowserCache {
 		add_action( 'upgrader_process_complete', array( __CLASS__, 'on_asset_change' ), 10, 2 );
 		add_action( 'switch_theme', array( __CLASS__, 'on_asset_change' ) );
 
-		// Send Cache-Control for plugin-generated files (minified CSS/JS, cached fonts).
-		add_action( 'template_redirect', array( __CLASS__, 'send_static_headers_for_plugin_files' ), 0 );
-
 		// Verify what browsers actually receive (see probe()): from the existing
 		// health-check cron (throttled) and on demand from the panel.
 		add_action( TE_Api::HEALTH_CRON_HOOK, array( __CLASS__, 'maybe_probe' ), 20 );
@@ -432,31 +429,6 @@ class TE_BrowserCache {
 	}
 
 	// -------------------------------------------------------------------------
-	// Plugin-generated files: send headers via PHP.
-	// -------------------------------------------------------------------------
-
-	/**
-	 * Send Cache-Control headers for plugin-generated static files.
-	 * These files ARE served through PHP rewrite, so we can set headers.
-	 */
-	public static function send_static_headers_for_plugin_files() {
-		if ( is_admin() || headers_sent() ) {
-			return;
-		}
-
-		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? $_SERVER['REQUEST_URI'] : '';
-
-		// Our minified files and cached fonts.
-		if ( false !== strpos( $request_uri, '/cache/flavor-edge/' ) ) {
-			$s = TE_Settings::get_all();
-			$static_max_age  = (int) $s['static_max_age'];
-			$static_s_maxage = (int) $s['static_s_maxage'];
-
-			header( "Cache-Control: public, max-age=$static_max_age, s-maxage=$static_s_maxage" );
-		}
-	}
-
-	// -------------------------------------------------------------------------
 	// Invalidation hooks for static assets.
 	// -------------------------------------------------------------------------
 
@@ -577,8 +549,17 @@ class TE_BrowserCache {
 	 * @param array $options  Upgrade options.
 	 */
 	public static function on_asset_change( $upgrader = null, $options = array() ) {
-		// Soft purge static assets via site tag — avoids thundering herd.
-		if ( TE_Settings::is_connected() ) {
+		// Only theme/plugin code changes what pages load (new ?ver= on their CSS/JS).
+		// Translation packs and core updates go through the same hook but do not
+		// change front-end assets, and a bulk update fires it once per item: purge
+		// at most once per request, and only when it can matter. Filterable, so a
+		// high-traffic site can turn this off and purge by hand after updates.
+		$type = is_array( $options ) && isset( $options['type'] ) ? (string) $options['type'] : ( 'switch_theme' === current_action() ? 'theme' : '' );
+		$purge = in_array( $type, array( 'plugin', 'theme' ), true );
+		$purge = (bool) apply_filters( 'flavor_edge_purge_on_asset_change', $purge, $type, $options );
+		static $done = false;
+		if ( $purge && ! $done && TE_Settings::is_connected() ) {
+			$done = true;
 			$site_tag = 'site-' . get_current_blog_id();
 			TE_Api::set_context( 'theme/plugin update' );
 			TE_Api::purge_tags( array( $site_tag ), true );

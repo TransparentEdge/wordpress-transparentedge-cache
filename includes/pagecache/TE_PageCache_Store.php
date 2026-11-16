@@ -305,7 +305,7 @@ class TE_PageCache_Store {
 		if ( false === $raw ) {
 			return null;
 		}
-		$entry = @unserialize( $raw );
+		$entry = @unserialize( $raw, array( 'allowed_classes' => false ) ); // entries hold only arrays/strings.
 		if ( ! is_array( $entry ) || ( $entry['v'] ?? 0 ) !== self::SCHEMA ) {
 			return null;
 		}
@@ -530,7 +530,7 @@ class TE_PageCache_Store {
 		if ( false === $raw ) {
 			return null;
 		}
-		$entry = @unserialize( $raw );
+		$entry = @unserialize( $raw, array( 'allowed_classes' => false ) ); // entries hold only arrays/strings.
 		if ( ! is_array( $entry ) || ( $entry['v'] ?? 0 ) !== self::SCHEMA ) {
 			return null;
 		}
